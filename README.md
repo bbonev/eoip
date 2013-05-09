@@ -23,7 +23,7 @@ Userland control utilities
 
 A simple control utility to create tunnels is included with following format:
 
-eoip <if-name> <tunnel-id> <src-address> <dst-address>
+eoip &lt;if-name&gt; &lt;tunnel-id&gt; &lt;src-address&gt; &lt;dst-address&gt;
 
 A patch to iproute2 to make this built-in is coming soon
 
