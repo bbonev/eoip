@@ -1,0 +1,91 @@
+--- linux-3.2.44/include/net/gre.h.orig	2013-05-08 19:16:32.338952414 +0300
++++ linux-3.2.44/include/net/gre.h	2013-05-08 19:36:58.003577608 +0300
+@@ -7,6 +7,10 @@
+ #define GREPROTO_PPTP		1
+ #define GREPROTO_MAX		2
+ 
++// handle EOIP protocol as a special case that does not overlap with
++// possible GRE protocol versions
++#define GREPROTO_EOIP		0x80
++
+ struct gre_protocol {
+ 	int  (*handler)(struct sk_buff *skb);
+ 	void (*err_handler)(struct sk_buff *skb, u32 info);
+--- linux-3.2.44/net/ipv4/gre.c.orig	2013-05-08 19:36:00.098981252 +0300
++++ linux-3.2.44/net/ipv4/gre.c	2013-05-08 19:38:02.904246248 +0300
+@@ -23,10 +23,21 @@
+ 
+ 
+ static const struct gre_protocol __rcu *gre_proto[GREPROTO_MAX] __read_mostly;
++static const struct gre_protocol __rcu *gre_proto_eoip __read_mostly;
+ static DEFINE_SPINLOCK(gre_proto_lock);
+ 
+ int gre_add_protocol(const struct gre_protocol *proto, u8 version)
+ {
++	if (version == GREPROTO_EOIP) {
++		spin_lock(&gre_proto_lock);
++		if (gre_proto_eoip)
++			goto err_out_unlock;
++
++		RCU_INIT_POINTER(gre_proto_eoip, proto);
++		spin_unlock(&gre_proto_lock);
++		return 0;
++	}
++
+ 	if (version >= GREPROTO_MAX)
+ 		goto err_out;
+ 
+@@ -47,6 +58,17 @@
+ 
+ int gre_del_protocol(const struct gre_protocol *proto, u8 version)
+ {
++	if (version == GREPROTO_EOIP) {
++		spin_lock(&gre_proto_lock);
++		if (rcu_dereference_protected(gre_proto_eoip,
++				lockdep_is_held(&gre_proto_lock)) != proto)
++			goto err_out_unlock;
++		RCU_INIT_POINTER(gre_proto_eoip, NULL);
++		spin_unlock(&gre_proto_lock);
++		synchronize_rcu();
++		return 0;
++	}
++
+ 	if (version >= GREPROTO_MAX)
+ 		goto err_out;
+ 
+@@ -72,6 +94,18 @@
+ 	u8 ver;
+ 	int ret;
+ 
++	if (pskb_may_pull(skb, 8)) // handle EOIP
++		if (skb->data[0] == 0x20 && skb->data[1] == 0x01 &&
++			skb->data[2] == 0x64 && skb->data[3] == 0x00) {
++			rcu_read_lock();
++			proto = rcu_dereference(gre_proto_eoip);
++			if (!proto || !proto->handler)
++				goto drop_unlock;
++			ret = proto->handler(skb);
++			rcu_read_unlock();
++			return ret;
++		}
++
+ 	if (!pskb_may_pull(skb, 12))
+ 		goto drop;
+ 
+@@ -100,6 +134,16 @@
+ 	const struct iphdr *iph = (const struct iphdr *)skb->data;
+ 	u8 ver = skb->data[(iph->ihl<<2) + 1]&0x7f;
+ 
++	if (skb->data[(iph->ihl<<2) + 0] == 0x20 && skb->data[(iph->ihl<<2) + 1] == 0x01 &&
++		skb->data[(iph->ihl<<2) + 2] == 0x64 && skb->data[(iph->ihl<<2) + 3] == 0x00) {
++		rcu_read_lock();
++		proto = rcu_dereference(gre_proto_eoip);
++		if (proto && proto->handler)
++			proto->err_handler(skb, info);
++		rcu_read_unlock();
++		return;
++	}
++
+ 	if (ver >= GREPROTO_MAX)
+ 		return;
+ 
