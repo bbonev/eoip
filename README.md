@@ -11,8 +11,11 @@ Install
 To patch a kernel tree with this code:
 
 cd path-to-kernel-source/linux-3.2.44
+
 patch -p1 < path-to-eoip/patch/kernel-3.2.44-eoip-gre-demux.patch
+
 patch -p1 < path-to-eoip/patch/kernel-3.2.44-eoip-buildconf.patch
+
 patch -p1 < path-to-eoip/patch/kernel-3.2.44-eoip.patch
 
 
