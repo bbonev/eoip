@@ -2,9 +2,12 @@ STRIP=strip
 
 all: eoip
 
-eoip: eoipcr.c
-	$(CC) -Wall -o eoip eoipcr.c
+eoip: eoipcr.c libnetlink.o
+	$(CC) -Wall -o eoip eoipcr.c libnetlink.o
 	$(STRIP) eoip
 
+libnetlink.o: libnetlink.c libnetlink.h
+	$(CC) -Wall -c libnetlink.c
+
 clean:
-	rm eoip
+	rm -f eoip get_if_list libnetlink.o
