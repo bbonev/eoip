@@ -29,6 +29,18 @@ afterwards `make (menu/x/...)config` and select `IP: EOIP tunnels over IP` locat
 
 EOIP tunnel depends on `IP: GRE demultiplexer`
 
+- To build the modules out of the kernel tree:
+
+```
+cd path-to-eoip/out-of-tree
+make
+make install
+```
+
+For this to work you need at least running's kernel headers to be installed.
+
+Also note that you may end with two versions of gre.ko - the modified one should be backward compatible but eoip will not work with the original kernel's version of gre.ko.
+
 - To build the userland management utility `eoip`:
 
 ```
