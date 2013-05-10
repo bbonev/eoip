@@ -251,7 +251,7 @@ int eoip_add(char *name,uint32_t tunnelid,uint32_t sip,uint32_t dip) {
 
 int main(int argc,char **argv) {
 	if (!((argc == 5) || (argc == 2 && !strcmp("list",argv[1])))) {
-		printf("usage:\n\t%sname tunnel-id source-ip dest-ip\n\t%s list\n",argv[0],argv[0]);
+		printf("usage:\n\t%s name tunnel-id source-ip dest-ip\n\t%s list\n",argv[0],argv[0]);
 		return 0;
 	}
 	if (argc == 2 && !strcmp("list",argv[1])) { // list interfaces
