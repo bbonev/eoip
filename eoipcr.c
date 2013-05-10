@@ -57,6 +57,8 @@ int print_link(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
 	else
 		kind="";
 	if (!strcmp(kind,"eoip") && ifinfo[IFLA_INFO_DATA]) {
+		char ts[IFNAMSIZ],td[IFNAMSIZ];
+
 		parse_rtattr(ifgreo, IFLA_GRE_MAX, (void *)rta_getattr_str(ifinfo[IFLA_INFO_DATA]), ifinfo[IFLA_INFO_DATA]->rta_len);
 		if (ifgreo[IFLA_GRE_LINK])
 			link=rta_getattr_u32(ifgreo[IFLA_GRE_LINK]);
@@ -70,7 +72,9 @@ int print_link(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
 			dip.s_addr=rta_getattr_u32(ifgreo[IFLA_GRE_REMOTE]);
 		if (ifgreo[IFLA_GRE_IKEY])
 			tunid=rta_getattr_u32(ifgreo[IFLA_GRE_IKEY]);
-		printf("%d: %s@%d: link/%s %s remote %s tunnel-id %d ttl %d tos %d\n",ifi->ifi_index,ifname,link,kind,inet_ntoa(sip),inet_ntoa(dip),tunid,ttl,tos);
+		strcpy(ts,inet_ntoa(sip));
+		strcpy(td,inet_ntoa(dip));
+		printf("%d: %s@%d: link/%s %s remote %s tunnel-id %d ttl %d tos %d\n",ifi->ifi_index,ifname,link,kind,ts,td,tunid,ttl,tos);
 	}
 
 	return 0;
