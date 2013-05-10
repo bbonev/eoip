@@ -74,6 +74,7 @@ GRE-like datagram follows. Note that it's nothing like RFC 1701 MikroTik mention
 
 * Header format (taken from https://github.com/katuma/eoip)
 
+
      0                   1                   2                   3
      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
