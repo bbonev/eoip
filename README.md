@@ -72,9 +72,9 @@ Protocol spec
 After IP header (which can be fragmented, MTU 1500 is usually used for tunnels)
 GRE-like datagram follows. Note that it's nothing like RFC 1701 MikroTik mentioned in their docs:
 
-* Header format (taken from https://github.com/katuma/eoip)
+Header format (taken from https://github.com/katuma/eoip)
 
-
+    
      0                   1                   2                   3
      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -83,6 +83,7 @@ GRE-like datagram follows. Note that it's nothing like RFC 1701 MikroTik mention
     |   Encapsulated frame length   |           Tunnel ID           |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     | Ethernet frame...                                             |
+
 
 Strangely enough the frame length is kept into network byte order and tunnel id in little endian byte order
 
