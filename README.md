@@ -16,7 +16,7 @@ Install
 
 This code is tested on a 3.2.44 linux kernel. It should not be hard to adapt it to newer or older kernels.
 
-- To patch a kernel tree with this code:
+- To patch a kernel tree:
 
 ```
 cd path-to-kernel-source/linux-3.2.44
@@ -39,7 +39,7 @@ make install
 
 For this to work you need at least running's kernel headers to be installed.
 
-Also note that you may end with two versions of gre.ko - the modified one should be backward compatible but eoip will not work with the original kernel's version of gre.ko.
+Also note that you may end with two versions of gre.ko - the modified one should be backward compatible but eoip will not work with the original kernel's version of gre.ko. Original gre.ko must be replaced with the newly built one.
 
 - To build the userland management utility `eoip`:
 
