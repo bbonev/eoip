@@ -10,4 +10,4 @@ libnetlink.o: libnetlink.c libnetlink.h
 	$(CC) -Wall -c libnetlink.c
 
 clean:
-	rm -f eoip get_if_list libnetlink.o
+	rm -f eoip libnetlink.o
