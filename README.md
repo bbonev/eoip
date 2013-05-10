@@ -25,7 +25,7 @@ Userland control utilities
 
    - to create new eoip tunnel interface
 
-`eoip &lt;if-name&gt; &lt;tunnel-id&gt; &lt;src-address&gt; &lt;dst-address&gt;`
+`eoip <if-name> <tunnel-id> <src-address> <dst-address>`
 
    - to list existing eoip tunnels
 
