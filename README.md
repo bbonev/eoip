@@ -25,9 +25,11 @@ patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip-buildconf.patch
 patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip.patch
 ```
 
-afterwards `make (menu/x/...)config` and select `IP: EOIP tunnels over IP` located under `Networking support` / `Networking options`
+afterwards configure the kernel in the usual ways `make (menu/x/...)config` and do not forget to select `IP: EOIP tunnels over IP` located under `Networking options` from `Networking support`
 
-EOIP tunnel depends on `IP: GRE demultiplexer`
+EOIP tunnel depends on `IP: GRE demultiplexer` - if it not selected then EOIP tunnel is not shown at all
+
+Besides on embedded systems it is recommended to build EOIP and GRE demux as modules.
 
 - To build the modules out of the kernel tree:
 
@@ -37,9 +39,12 @@ make
 make install
 ```
 
-For this to work you need at least running's kernel headers to be installed.
+For this to work at least the running kernel's headers should be available.
 
-Also note that you may end with two versions of gre.ko - the modified one should be backward compatible but eoip will not work with the original kernel's version of gre.ko. Original gre.ko must be replaced with the newly built one.
+This build process will place the modules in /lib/modules/x.x.x.x/misc. Note that there will be two versions of gre.ko (the GRE demux).
+At least on 3.2.44 it is safe to replace the original version with the modified one it is backward compatible.
+
+For eoip protocol to operate properly at least the new version of GRE demux should be loaded first.
 
 - To build the userland management utility `eoip`:
 
@@ -52,7 +57,7 @@ make
 Userland management utility
 ---------------------------
 
-##### `eoip` - eoip tunnel management utility
+##### `eoip` - tunnel management utility
 
 - to create new eoip tunnel interface:
 
