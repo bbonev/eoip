@@ -31,8 +31,6 @@ int print_link(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
 
 	sip.s_addr=dip.s_addr=htonl(0);
 
-	//printf("called back\n");
-
 	if (n->nlmsg_type != RTM_NEWLINK && n->nlmsg_type != RTM_DELLINK) {
 		fprintf(stderr, "Not RTM_xxxLINK: %08x %08x %08x\n", n->nlmsg_len, n->nlmsg_type, n->nlmsg_flags);
 		return 0;
@@ -44,8 +42,6 @@ int print_link(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
 	}
 
 	ifi=(void *)r;
-
-	//printf("got len: %d\n", len);
 
 	parse_rtattr(ifattr, IFLA_MAX, IFLA_RTA(r), n->nlmsg_len - NLMSG_LENGTH(sizeof(*r)));
 	if (ifattr[IFLA_IFNAME])
