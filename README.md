@@ -5,6 +5,7 @@ Kernel mode EOIP (Ethernet over IP) tunnel compatible with MikroTik
 
 This code is developed and tested on 3.2.44 linux kernel. It should not be hard to adapt it to newer kernels.
 
+
 Install
 -------
 
@@ -17,6 +18,7 @@ patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip-gre-demux.patch
 patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip-buildconf.patch
 
 patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip.patch
+
 
 Userland control utilities
 --------------------------
@@ -33,3 +35,8 @@ Userland control utilities
 
 Next step is to make a patch for iproute2 to include eoip
 
+
+License
+-------
+
+All code and code modifications in this project are released under the GPL licence. Look at the COPYING file.
