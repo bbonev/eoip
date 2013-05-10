@@ -56,11 +56,25 @@ Userland management utility
 
 - to create new eoip tunnel interface:
 
-`eoip add tunnel-id <tunnel-id> [name <if-name>] [local <src-address>] [remote <dst-address>] [link <ifindex>] [ttl <ttl>] [tos <tos>]`
+```
+    eoip add tunnel-id <tunnel-id> [name <if-name>]
+             [local <src-address>] [remote <dst-address>]
+             [link <ifindex>] [ttl <ttl>] [tos <tos>]
+```
+
+- to change existing eoip tunnel interface:
+
+```
+    eoip change name <if-name> tunnel-id <tunnel-id>
+                [local <src-address>] [remote <dst-address>]
+                [link <ifindex>] [ttl <ttl>] [tos <tos>]
+```
 
 - to list existing eoip tunnels:
 
-`eoip list`
+```
+    eoip list
+```
 
 
 Roadmap
