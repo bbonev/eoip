@@ -3,7 +3,7 @@ EOIP
 
 Kernel mode EOIP (Ethernet over IP) tunnel compatible with MikroTik RouterOS
 
-There are several other projects doing the same job with userland utilities via tap interfaces and raw sockets. While they are easier to install they lack perfomance.
+There are several projects doing the same job with userland utilities via tap interfaces and raw sockets. While a userland application is easier to install and maintain it lacks the perfomance and stability of an in-kernel module. Especially for the simple job of adding and stripping the EOIP tunneling headers. The userland tunneling application may be good for testing, research or concept proof projects but not suitable for production environments with high bandwidth requirements.
 
 This project's goals are:
 
@@ -64,7 +64,7 @@ Development process
 
 This code was developed based on information gathered from sniffed datagrams and information from similar projects without involving any reverse engineering of code from the closed source commercial product
 
-The protocol is not documented and although it looks like there are no deviations in the header format this cannot be guaranteed in the future
+The protocol is not documented and although it looks like there are no deviations in the header format this cannot be guaranteed in all environments or for future releases of the commercial product
 
 Protocol spec
 -------------
