@@ -61,7 +61,7 @@ int print_link(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
 	else
 		kind="";
 	if (!strcmp(kind,"eoip") && ifinfo[IFLA_INFO_DATA]) {
-		parse_rtattr(ifgreo, IFLA_GRE_MAX, (void *)rta_getattr_str(ifinfo[IFLA_INFO_DATA]), ifattr[IFLA_INFO_DATA]->rta_len);
+		parse_rtattr(ifgreo, IFLA_GRE_MAX, (void *)rta_getattr_str(ifinfo[IFLA_INFO_DATA]), ifinfo[IFLA_INFO_DATA]->rta_len);
 		if (ifgreo[IFLA_GRE_LINK])
 			link=rta_getattr_u32(ifgreo[IFLA_GRE_LINK]);
 		if (ifgreo[IFLA_GRE_TOS])
