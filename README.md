@@ -25,7 +25,7 @@ patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip-buildconf.patch
 patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip.patch
 ```
 
-afterwards `make (menu/x/...)config` and select `IP: EOIP tunnels over IP` located in Networking support / Networking options
+afterwards `make (menu/x/...)config` and select `IP: EOIP tunnels over IP` located under `Networking support` / `Networking options`
 
 EOIP tunnel depends on `IP: GRE demultiplexer`
 
