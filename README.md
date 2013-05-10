@@ -21,15 +21,15 @@ patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip.patch
 Userland control utilities
 --------------------------
 
-##### A simple control utility to create tunnels is included with following formats:
+##### `eoip` - eoip tunnel management utility
 
-   - to create new eoip tunnel interface
+- to create new eoip tunnel interface:
 
 `eoip <if-name> <tunnel-id> <src-address> <dst-address>`
 
-   - to list existing eoip tunnels
+- to list existing eoip tunnels:
 
 `eoip list`
 
-A patch to iproute2 to make this built-in is coming soon
+Next step is to make a patch for iproute2 to include eoip
 
