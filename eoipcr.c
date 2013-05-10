@@ -357,8 +357,6 @@ int main(int argc,char **argv) {
 					int noarg=!((i + 1) < argc);
 					struct in_addr iad;
 
-					printf("got code: %d for %s\n",p,argv[i]);
-
 					switch (p) {
 						default:
 							break;
