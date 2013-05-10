@@ -99,6 +99,13 @@ Header format (taken from https://github.com/katuma/eoip)
 
 Strangely enough the frame length is kept into network byte order and tunnel id in little endian byte order
 
+
+Bugs
+----
+
+Consider this code as in early alpha - it is not yet well tested and probably there are lots of bugs inside.
+
+
 License
 -------
 
