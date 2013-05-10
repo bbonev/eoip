@@ -324,7 +324,11 @@ static e_cmd find_cmd(s_cmd *l, char *pcmd) {
 }
 
 static void usage(char *me) {
-	printf("usage:\n\t%s name tunnel-id source-ip dest-ip\n\t%s list\n",me,me);
+	printf("usage:\n"
+		"\t%s add [name <name>] tunnel-id <id> [source-ip <ip>] dest-ip <ip> [ttl <ttl>] [tos <tos>] [link <ifindex>]\n"
+		"\t%s set  name <name>  tunnel-id <id> [source-ip <ip>] dest-ip <ip> [ttl <ttl>] [tos <tos>] [link <ifindex>]\n"
+		"\t%s list\n",
+		me,me,me);
 }
 
 int main(int argc,char **argv) {
