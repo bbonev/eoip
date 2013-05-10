@@ -1,10 +1,10 @@
 --- linux-3.2.44/net/ipv4/eoip.c.orig	1970-01-01 02:00:00.000000000 +0200
-+++ linux-3.2.44/net/ipv4/eoip.c	2013-05-09 16:48:35.197497316 +0300
-@@ -0,0 +1,989 @@
++++ linux-3.2.44/net/ipv4/eoip.c	2013-05-10 04:44:53.124076806 +0300
+@@ -0,0 +1,971 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
-+ * Based on the code from ip_gre.c
++ *	Based on the code from ip_gre.c
 + *
 + *	Authors: Alexey Kuznetsov (kuznet@ms2.inr.ac.ru)
 + *	Authors: Boian Bonev (bbonev@ipacct.com)
@@ -63,7 +63,7 @@
 +
 +/* Fallback tunnel: no source, no destination, no key, no options */
 +
-+#define HASH_SIZE  16
++#define HASH_SIZE 16
 +
 +static int eoip_net_id __read_mostly;
 +struct eoip_net {
@@ -98,22 +98,22 @@
 +		const struct pcpu_tstats *tstats = per_cpu_ptr(dev->tstats, i);
 +
 +		sum.rx_packets += tstats->rx_packets;
-+		sum.rx_bytes   += tstats->rx_bytes;
++		sum.rx_bytes += tstats->rx_bytes;
 +		sum.tx_packets += tstats->tx_packets;
-+		sum.tx_bytes   += tstats->tx_bytes;
++		sum.tx_bytes += tstats->tx_bytes;
 +	}
 +	dev->stats.rx_packets = sum.rx_packets;
-+	dev->stats.rx_bytes   = sum.rx_bytes;
++	dev->stats.rx_bytes = sum.rx_bytes;
 +	dev->stats.tx_packets = sum.tx_packets;
-+	dev->stats.tx_bytes   = sum.tx_bytes;
++	dev->stats.tx_bytes = sum.tx_bytes;
 +	return &dev->stats;
 +}
 +
 +/* Given src, dst and key, find appropriate for input tunnel. */
 +
 +static struct ip_tunnel * eoip_tunnel_lookup(struct net_device *dev,
-+					      __be32 remote, __be32 local,
-+					      __be32 key)
++						__be32 remote, __be32 local,
++						__be32 key)
 +{
 +	struct net *net = dev_net(dev);
 +	int link = dev->ifindex;
@@ -125,9 +125,9 @@
 +
 +	for_each_ip_tunnel_rcu(ign->tunnels[h0]) {
 +		if (local != t->parms.iph.saddr ||
-+		    remote != t->parms.iph.daddr ||
-+		    key != t->parms.i_key ||
-+		    !(t->dev->flags & IFF_UP))
++				remote != t->parms.iph.daddr ||
++				key != t->parms.i_key ||
++				!(t->dev->flags & IFF_UP))
 +			continue;
 +
 +		score = 0;
@@ -179,8 +179,8 @@
 +	struct ip_tunnel *iter;
 +
 +	for (tp = eoip_bucket(ign, t);
-+		 (iter = rtnl_dereference(*tp)) != NULL;
-+		 tp = &iter->next) {
++			(iter = rtnl_dereference(*tp)) != NULL;
++			tp = &iter->next) {
 +		if (t == iter) {
 +			rcu_assign_pointer(*tp, t->next);
 +			break;
@@ -201,8 +201,8 @@
 +	struct eoip_net *ign = net_generic(net, eoip_net_id);
 +
 +	for (tp = __eoip_bucket(ign, parms);
-+		 (t = rtnl_dereference(*tp)) != NULL;
-+		 tp = &t->next)
++			(t = rtnl_dereference(*tp)) != NULL;
++			tp = &t->next)
 +		if (local == t->parms.iph.saddr &&
 +			remote == t->parms.iph.daddr &&
 +			key == t->parms.i_key &&
@@ -281,7 +281,7 @@
 + */
 +
 +	const struct iphdr *iph = (const struct iphdr *)skb->data;
-+	__be16	     *p = (__be16*)(skb->data+(iph->ihl<<2));
++	__be16 *p = (__be16*)(skb->data+(iph->ihl<<2));
 +	int grehlen = (iph->ihl<<2) + 4;
 +	const int type = icmp_hdr(skb)->type;
 +	const int code = icmp_hdr(skb)->code;
@@ -336,7 +336,7 @@
 +				flags & GRE_KEY ?
 +				*(((__be32 *)p) + (grehlen / 4) - 1) : 0);
 +	if (t == NULL || t->parms.iph.daddr == 0 ||
-+	    ipv4_is_multicast(t->parms.iph.daddr))
++			ipv4_is_multicast(t->parms.iph.daddr))
 +		goto out;
 +
 +	if (t->parms.iph.ttl == 0 && type == ICMP_TIME_EXCEEDED)
@@ -354,26 +354,24 @@
 +static int eoip_rcv(struct sk_buff *skb)
 +{
 +	const struct iphdr *iph;
-+	u8     *h;
-+	__be16    flags;
++	u8 *h;
++	__be16 flags;
 +	__be32 key = 0;
 +	struct ip_tunnel *tunnel;
-+	int    offset = 8;
++	int offset = 8;
 +
-+	if (!pskb_may_pull(skb, 24)) // ip header + 8 bytes
++	if (!pskb_may_pull(skb, 28)) // ip header (20 bytes) + eoip header (8 bytes)
 +		goto drop_nolock;
 +
 +	iph = ip_hdr(skb);
 +	h = skb->data;
 +	flags = *(__be16*)h;
 +
-+	key = *(__be16 *)(h + 6);
-+
-+	//printk("eoip: got key %04x src: %pI4 dst: %pI4\n",key,&iph->saddr,&iph->daddr);
++	key = le16_to_cpu(*(__le16 *)(h + 6));
 +
 +	rcu_read_lock();
 +	if ((tunnel = eoip_tunnel_lookup(skb->dev,
-+					  iph->saddr, iph->daddr, key))) {
++			iph->saddr, iph->daddr, key))) {
 +		struct pcpu_tstats *tstats;
 +
 +		secpath_reset(skb);
@@ -431,18 +429,18 @@
 +{
 +	struct ip_tunnel *tunnel = netdev_priv(dev);
 +	struct pcpu_tstats *tstats;
-+	const struct iphdr  *old_iph = ip_hdr(skb);
-+	const struct iphdr  *tiph;
++	const struct iphdr *old_iph = ip_hdr(skb);
++	const struct iphdr *tiph;
 +	struct flowi4 fl4;
-+	u8     tos;
++	u8 tos;
 +	__be16 df;
-+	struct rtable *rt;     			/* Route to the other host */
++	struct rtable *rt;				/* Route to the other host */
 +	struct net_device *tdev;		/* Device to other host */
-+	struct iphdr  *iph;			/* Our new IP header */
++	struct iphdr *iph;				/* Our new IP header */
 +	unsigned int max_headroom;		/* The extra header space needed */
-+	int    gre_hlen;
++	int gre_hlen;
 +	__be32 dst;
-+	int    mtu;
++	int mtu;
 +	uint16_t frame_size;
 +
 +	IPCB(skb)->flags = 0;
@@ -456,8 +454,8 @@
 +	frame_size = skb->len;
 +
 +	rt = ip_route_output_gre(dev_net(dev), &fl4, dst, tiph->saddr,
-+				 tunnel->parms.o_key, RT_TOS(tos),
-+				 tunnel->parms.link);
++			tunnel->parms.o_key, RT_TOS(tos),
++			tunnel->parms.link);
 +	if (IS_ERR(rt)) {
 +		dev->stats.tx_carrier_errors++;
 +		goto tx_error;
@@ -483,7 +481,7 @@
 +		df |= (old_iph->frag_off&htons(IP_DF));
 +
 +		if ((old_iph->frag_off&htons(IP_DF)) &&
-+		    mtu < ntohs(old_iph->tot_len)) {
++				mtu < ntohs(old_iph->tot_len)) {
 +			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
 +			ip_rt_put(rt);
 +			goto tx_error;
@@ -495,8 +493,8 @@
 +
 +		if (rt6 && mtu < dst_mtu(skb_dst(skb)) && mtu >= IPV6_MIN_MTU) {
 +			if ((tunnel->parms.iph.daddr &&
-+			     !ipv4_is_multicast(tunnel->parms.iph.daddr)) ||
-+			    rt6->rt6i_dst.plen == 128) {
++					!ipv4_is_multicast(tunnel->parms.iph.daddr)) ||
++					rt6->rt6i_dst.plen == 128) {
 +				rt6->rt6i_flags |= RTF_MODIFIED;
 +				dst_metric_set(skb_dst(skb), RTAX_MTU, mtu);
 +			}
@@ -523,7 +521,7 @@
 +	max_headroom = LL_RESERVED_SPACE(tdev) + gre_hlen + rt->dst.header_len;
 +
 +	if (skb_headroom(skb) < max_headroom || skb_shared(skb)||
-+	    (skb_cloned(skb) && !skb_clone_writable(skb, 0))) {
++			(skb_cloned(skb) && !skb_clone_writable(skb, 0))) {
 +		struct sk_buff *new_skb = skb_realloc_headroom(skb, max_headroom);
 +		if (!new_skb) {
 +			ip_rt_put(rt);
@@ -543,7 +541,7 @@
 +	skb_reset_network_header(skb);
 +	memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
 +	IPCB(skb)->flags &= ~(IPSKB_XFRM_TUNNEL_SIZE | IPSKB_XFRM_TRANSFORMED |
-+			      IPSKB_REROUTED);
++			IPSKB_REROUTED);
 +	skb_dst_drop(skb);
 +	skb_dst_set(skb, &rt->dst);
 +
@@ -551,14 +549,14 @@
 +	 *	Push down and install the IPIP header.
 +	 */
 +
-+	iph 			=	ip_hdr(skb);
-+	iph->version		=	4;
-+	iph->ihl		=	sizeof(struct iphdr) >> 2;
-+	iph->frag_off		=	df;
-+	iph->protocol		=	IPPROTO_GRE;
-+	iph->tos		=	tos;
-+	iph->daddr		=	fl4.daddr;
-+	iph->saddr		=	fl4.saddr;
++	iph = ip_hdr(skb);
++	iph->version = 4;
++	iph->ihl = sizeof(struct iphdr) >> 2;
++	iph->frag_off = df;
++	iph->protocol = IPPROTO_GRE;
++	iph->tos = tos;
++	iph->daddr = fl4.daddr;
++	iph->saddr = fl4.saddr;
 +
 +	if ((iph->ttl = tiph->ttl) == 0) {
 +		if (skb->protocol == htons(ETH_P_IP))
@@ -571,16 +569,13 @@
 +			iph->ttl = ip4_dst_hoplimit(&rt->dst);
 +	}
 +
-+	//((__be16 *)(iph + 1))[0] = tunnel->parms.o_flags;
-+	//((__be16 *)(iph + 1))[1] = (dev->type == ARPHRD_ETHER) ?
-+	//			   htons(ETH_P_TEB) : skb->protocol;
 +	((u8 *)(iph + 1))[0] = 0x20;
 +	((u8 *)(iph + 1))[1] = 0x01;
 +	((u8 *)(iph + 1))[2] = 0x64;
 +	((u8 *)(iph + 1))[3] = 0x00;
 +
 +	((__be16 *)(iph + 1))[2] = htons(frame_size);
-+	((__be16 *)(iph + 1))[3] = (tunnel->parms.i_key);
++	((__le16 *)(iph + 1))[3] = cpu_to_le16(tunnel->parms.i_key);
 +
 +	nf_reset(skb);
 +	tstats = this_cpu_ptr(dev->tstats);
@@ -612,10 +607,10 @@
 +		struct rtable *rt;
 +
 +		rt = ip_route_output_gre(dev_net(dev), &fl4,
-+					 iph->daddr, iph->saddr,
-+					 tunnel->parms.o_key,
-+					 RT_TOS(iph->tos),
-+					 tunnel->parms.link);
++				iph->daddr, iph->saddr,
++				tunnel->parms.o_key,
++				RT_TOS(iph->tos),
++				tunnel->parms.link);
 +		if (!IS_ERR(rt)) {
 +			tdev = rt->dst.dev;
 +			ip_rt_put(rt);
@@ -643,10 +638,9 @@
 +}
 +
 +static int eoip_if_change_mtu(struct net_device *dev, int new_mtu)
-+{ // !!! TODO: properly calculate EOIP max mtu
++{
 +	struct ip_tunnel *tunnel = netdev_priv(dev);
-+	if (new_mtu < 68 ||
-+	    new_mtu > 0xFFF8 - dev->hard_header_len - tunnel->hlen)
++	if (new_mtu < 68 || new_mtu > 0xFFF8 - dev->hard_header_len - tunnel->hlen)
 +		return -EINVAL;
 +	dev->mtu = new_mtu;
 +	return 0;
@@ -659,7 +653,7 @@
 +}
 +
 +static const struct gre_protocol eoip_protocol = {
-+	.handler     = eoip_rcv,
++	.handler = eoip_rcv,
 +	.err_handler = eoip_err,
 +};
 +
@@ -696,9 +690,9 @@
 +}
 +
 +static struct pernet_operations eoip_net_ops = {
++	.id = &eoip_net_id,
 +	.init = eoip_init_net,
 +	.exit = eoip_exit_net,
-+	.id   = &eoip_net_id,
 +	.size = sizeof(struct eoip_net),
 +};
 +
@@ -779,39 +773,28 @@
 +}
 +
 +static const struct net_device_ops eoip_netdev_ops = {
-+	.ndo_init		= eoip_if_init,
-+	.ndo_uninit		= eoip_if_uninit,
-+	.ndo_start_xmit		= eoip_if_xmit,
-+	.ndo_set_mac_address 	= eth_mac_addr,
-+	.ndo_validate_addr	= eth_validate_addr,
-+	.ndo_change_mtu		= eoip_if_change_mtu,
-+	.ndo_get_stats		= eoip_if_get_stats,
++	.ndo_init = eoip_if_init,
++	.ndo_uninit = eoip_if_uninit,
++	.ndo_start_xmit = eoip_if_xmit,
++	.ndo_set_mac_address = eth_mac_addr,
++	.ndo_validate_addr = eth_validate_addr,
++	.ndo_change_mtu = eoip_if_change_mtu,
++	.ndo_get_stats = eoip_if_get_stats,
 +};
 +
 +static void eoip_setup(struct net_device *dev)
 +{
 +	ether_setup(dev);
 +
-+	dev->netdev_ops		= &eoip_netdev_ops;
-+	dev->destructor 	= eoip_dev_free;
++	dev->netdev_ops = &eoip_netdev_ops;
++	dev->destructor = eoip_dev_free;
 +
-+	dev->iflink		= 0;
-+	dev->features		|= NETIF_F_NETNS_LOCAL;
-+}
-+
-+static void eoip_dump_params(struct ip_tunnel *nt)
-+{
-+	/*printk(KERN_INFO "eoip: link: %d flags: %02x key: %04x s: %pI4 d: %pI4\n",
-+		nt->parms.link,
-+		nt->parms.i_flags,
-+		nt->parms.i_key,
-+		&nt->parms.iph.saddr,
-+		&nt->parms.iph.daddr
-+	);*/
++	dev->iflink = 0;
++	dev->features |= NETIF_F_NETNS_LOCAL;
 +}
 +
 +static int eoip_newlink(struct net *src_net, struct net_device *dev, struct nlattr *tb[],
-+			 struct nlattr *data[])
++			struct nlattr *data[])
 +{
 +	struct ip_tunnel *nt;
 +	struct net *net = dev_net(dev);
@@ -821,7 +804,6 @@
 +
 +	nt = netdev_priv(dev);
 +	eoip_netlink_parms(data, &nt->parms);
-+	eoip_dump_params(nt);
 +
 +	if (eoip_tunnel_find(net, &nt->parms, dev->type))
 +		return -EEXIST;
@@ -846,7 +828,7 @@
 +}
 +
 +static int eoip_changelink(struct net_device *dev, struct nlattr *tb[],
-+			    struct nlattr *data[])
++					struct nlattr *data[])
 +{
 +	struct ip_tunnel *t, *nt;
 +	struct net *net = dev_net(dev);
