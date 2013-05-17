@@ -1,6 +1,9 @@
---- linux-3.2.44/net/ipv4/eoip.c.orig	1970-01-01 02:00:00.000000000 +0200
-+++ linux-3.2.44/net/ipv4/eoip.c	2013-05-10 13:36:41.410721561 +0300
-@@ -0,0 +1,971 @@
+
+Signed-off-by: Boian Bonev <bbonev@ipacct.com>
+
+--- linux-3.2.45/net/ipv4/eoip.c.orig	1970-01-01 02:00:00.000000000 +0200
++++ linux-3.2.45/net/ipv4/eoip.c	2013-05-17 04:26:51.784514446 +0300
+@@ -0,0 +1,933 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
@@ -21,7 +24,7 @@
 +#include <linux/types.h>
 +#include <linux/kernel.h>
 +#include <linux/slab.h>
-+#include <asm/uaccess.h>
++#include <linux/uaccess.h>
 +#include <linux/skbuff.h>
 +#include <linux/netdevice.h>
 +#include <linux/in.h>
@@ -111,7 +114,7 @@
 +
 +/* Given src, dst and key, find appropriate for input tunnel. */
 +
-+static struct ip_tunnel * eoip_tunnel_lookup(struct net_device *dev,
++static struct ip_tunnel *eoip_tunnel_lookup(struct net_device *dev,
 +						__be32 remote, __be32 local,
 +						__be32 key)
 +{
@@ -281,7 +284,7 @@
 + */
 +
 +	const struct iphdr *iph = (const struct iphdr *)skb->data;
-+	__be16 *p = (__be16*)(skb->data+(iph->ihl<<2));
++	__be16 *p = (__be16 *)(skb->data+(iph->ihl<<2));
 +	int grehlen = (iph->ihl<<2) + 4;
 +	const int type = icmp_hdr(skb)->type;
 +	const int code = icmp_hdr(skb)->code;
@@ -360,18 +363,20 @@
 +	struct ip_tunnel *tunnel;
 +	int offset = 8;
 +
-+	if (!pskb_may_pull(skb, 28)) // ip header (20 bytes) + eoip header (8 bytes)
++	/* ip header (20 bytes) + eoip header (8 bytes) */
++	if (!pskb_may_pull(skb, 28))
 +		goto drop_nolock;
 +
 +	iph = ip_hdr(skb);
 +	h = skb->data;
-+	flags = *(__be16*)h;
++	flags = *(__be16 *)h;
 +
 +	key = le16_to_cpu(*(__le16 *)(h + 6));
 +
 +	rcu_read_lock();
-+	if ((tunnel = eoip_tunnel_lookup(skb->dev,
-+			iph->saddr, iph->daddr, key))) {
++
++	tunnel = eoip_tunnel_lookup(skb->dev, iph->saddr, iph->daddr, key);
++	if (tunnel) {
 +		struct pcpu_tstats *tstats;
 +
 +		secpath_reset(skb);
@@ -433,11 +438,10 @@
 +	const struct iphdr *tiph;
 +	struct flowi4 fl4;
 +	u8 tos;
-+	__be16 df;
-+	struct rtable *rt;				/* Route to the other host */
-+	struct net_device *tdev;		/* Device to other host */
-+	struct iphdr *iph;				/* Our new IP header */
-+	unsigned int max_headroom;		/* The extra header space needed */
++	struct rtable *rt;			/* Route to the other host */
++	struct net_device *tdev;	/* Device to other host */
++	struct iphdr *iph;			/* Our new IP header */
++	unsigned int max_headroom;	/* The extra header space needed */
 +	int gre_hlen;
 +	__be32 dst;
 +	int mtu;
@@ -468,49 +472,14 @@
 +		goto tx_error;
 +	}
 +
-+	/*df = tiph->frag_off;
-+	if (df)
-+		mtu = dst_mtu(&rt->dst) - dev->hard_header_len - tunnel->hlen;
-+	else*/
-+		mtu = skb_dst(skb) ? dst_mtu(skb_dst(skb)) : dev->mtu;
++	mtu = skb_dst(skb) ? dst_mtu(skb_dst(skb)) : dev->mtu;
 +
 +	if (skb_dst(skb))
 +		skb_dst(skb)->ops->update_pmtu(skb_dst(skb), mtu);
 +
-+	/* !!! if (skb->protocol == htons(ETH_P_IP)) {
-+		df |= (old_iph->frag_off&htons(IP_DF));
-+
-+		if ((old_iph->frag_off&htons(IP_DF)) &&
-+				mtu < ntohs(old_iph->tot_len)) {
-+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
-+			ip_rt_put(rt);
-+			goto tx_error;
-+		}
-+	} 
-+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-+	else if (skb->protocol == htons(ETH_P_IPV6)) {
-+		struct rt6_info *rt6 = (struct rt6_info *)skb_dst(skb);
-+
-+		if (rt6 && mtu < dst_mtu(skb_dst(skb)) && mtu >= IPV6_MIN_MTU) {
-+			if ((tunnel->parms.iph.daddr &&
-+					!ipv4_is_multicast(tunnel->parms.iph.daddr)) ||
-+					rt6->rt6i_dst.plen == 128) {
-+				rt6->rt6i_flags |= RTF_MODIFIED;
-+				dst_metric_set(skb_dst(skb), RTAX_MTU, mtu);
-+			}
-+		}
-+
-+		if (mtu >= IPV6_MIN_MTU && mtu < skb->len - tunnel->hlen + gre_hlen) {
-+			icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu);
-+			ip_rt_put(rt);
-+			goto tx_error;
-+		}
-+	}
-+#endif
-+	*/
-+
 +	if (tunnel->err_count > 0) {
-+		if (time_before(jiffies, tunnel->err_time + IPTUNNEL_ERR_TIMEO)) {
++		if (time_before(jiffies,
++				tunnel->err_time + IPTUNNEL_ERR_TIMEO)) {
 +			tunnel->err_count--;
 +
 +			dst_link_failure(skb);
@@ -520,9 +489,11 @@
 +
 +	max_headroom = LL_RESERVED_SPACE(tdev) + gre_hlen + rt->dst.header_len;
 +
-+	if (skb_headroom(skb) < max_headroom || skb_shared(skb)||
++	if (skb_headroom(skb) < max_headroom || skb_shared(skb) ||
 +			(skb_cloned(skb) && !skb_clone_writable(skb, 0))) {
-+		struct sk_buff *new_skb = skb_realloc_headroom(skb, max_headroom);
++		struct sk_buff *new_skb;
++
++		new_skb = skb_realloc_headroom(skb, max_headroom);
 +		if (!new_skb) {
 +			ip_rt_put(rt);
 +			dev->stats.tx_dropped++;
@@ -552,22 +523,15 @@
 +	iph = ip_hdr(skb);
 +	iph->version = 4;
 +	iph->ihl = sizeof(struct iphdr) >> 2;
-+	iph->frag_off = 0; //df;
++	iph->frag_off = 0;
 +	iph->protocol = IPPROTO_GRE;
 +	iph->tos = tos;
 +	iph->daddr = fl4.daddr;
 +	iph->saddr = fl4.saddr;
++	iph->ttl = tiph->ttl;
 +
-+	if ((iph->ttl = tiph->ttl) == 0) {
-+		/*if (skb->protocol == htons(ETH_P_IP))
-+			iph->ttl = old_iph->ttl;
-+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-+		else if (skb->protocol == htons(ETH_P_IPV6))
-+			iph->ttl = ((const struct ipv6hdr *)old_iph)->hop_limit;
-+#endif
-+		else*/
-+			iph->ttl = ip4_dst_hoplimit(&rt->dst);
-+	}
++	if (iph->ttl == 0)
++		iph->ttl = ip4_dst_hoplimit(&rt->dst);
 +
 +	((u8 *)(iph + 1))[0] = 0x20;
 +	((u8 *)(iph + 1))[1] = 0x01;
@@ -640,7 +604,8 @@
 +static int eoip_if_change_mtu(struct net_device *dev, int new_mtu)
 +{
 +	struct ip_tunnel *tunnel = netdev_priv(dev);
-+	if (new_mtu < 68 || new_mtu > 0xFFF8 - dev->hard_header_len - tunnel->hlen)
++	if (new_mtu < 68 ||
++			new_mtu > 0xFFF8 - dev->hard_header_len - tunnel->hlen)
 +		return -EINVAL;
 +	dev->mtu = new_mtu;
 +	return 0;
@@ -793,8 +758,8 @@
 +	dev->features |= NETIF_F_NETNS_LOCAL;
 +}
 +
-+static int eoip_newlink(struct net *src_net, struct net_device *dev, struct nlattr *tb[],
-+			struct nlattr *data[])
++static int eoip_newlink(struct net *src_net, struct net_device *dev,
++			struct nlattr *tb[], struct nlattr *data[])
 +{
 +	struct ip_tunnel *nt;
 +	struct net *net = dev_net(dev);
@@ -940,7 +905,7 @@
 +	if (err < 0)
 +		return err;
 +
-+	err = gre_add_protocol(&eoip_protocol, GREPROTO_EOIP);
++	err = gre_add_protocol(&eoip_protocol, GREPROTO_NONSTD_EOIP);
 +	if (err < 0) {
 +		printk(KERN_INFO "eoip init: can't add protocol\n");
 +		goto add_proto_failed;
@@ -948,13 +913,13 @@
 +
 +	err = rtnl_link_register(&eoip_ops);
 +	if (err < 0)
-+		goto tap_ops_failed;
++		goto eoip_ops_failed;
 +
 +out:
 +	return err;
 +
-+tap_ops_failed:
-+	gre_del_protocol(&eoip_protocol, GREPROTO_EOIP);
++eoip_ops_failed:
++	gre_del_protocol(&eoip_protocol, GREPROTO_NONSTD_EOIP);
 +add_proto_failed:
 +	unregister_pernet_device(&eoip_net_ops);
 +	goto out;
@@ -963,7 +928,7 @@
 +static void __exit eoip_fini(void)
 +{
 +	rtnl_link_unregister(&eoip_ops);
-+	if (gre_del_protocol(&eoip_protocol, GREPROTO_EOIP) < 0)
++	if (gre_del_protocol(&eoip_protocol, GREPROTO_NONSTD_EOIP) < 0)
 +		printk(KERN_INFO "eoip close: can't remove protocol\n");
 +	unregister_pernet_device(&eoip_net_ops);
 +}
