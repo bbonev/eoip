@@ -382,7 +382,7 @@ int main(int argc,char **argv) {
 							printf("BUG!\n");
 							return 0;
 						case P_NAME:
-							ifname[sizeof ifname] = 0;
+							ifname[(sizeof ifname)-1] = 0;
 							strncpy(ifname,argv[i + 1], IFNAMSIZ);
 							break;
 						case P_TTL:
