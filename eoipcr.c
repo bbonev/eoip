@@ -325,8 +325,8 @@ static e_cmd find_cmd(s_cmd *l, char *pcmd) {
 
 static void usage(char *me) {
 	printf("usage:\n"
-		"\t%s add [name <name>] tunnel-id <id> [source-ip <ip>] dest-ip <ip> [ttl <ttl>] [tos <tos>] [link <ifindex>]\n"
-		"\t%s set  name <name>  tunnel-id <id> [source-ip <ip>] dest-ip <ip> [ttl <ttl>] [tos <tos>] [link <ifindex>]\n"
+		"\t%s add [name <name>] tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>]\n"
+		"\t%s set  name <name>  tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>]\n"
 		"\t%s list\n",
 		me,me,me);
 }
@@ -392,8 +392,14 @@ int main(int argc,char **argv) {
 							tos=atoi(argv[i + 1]);
 							break;
 						case P_LINK:
-							// TODO: add converting ifname to ifinidex, also support numeric arg
-							link=atoi(argv[i + 1]);
+							// convert ifname to ifinidex, also support numeric arg
+							link=if_nametoindex(argv[i + 1]);
+							if (!link)
+								link=atoi(argv[i + 1]);
+							if (!link) {
+								printf("invald interface name/index: %s\n", argv[i + 1]);
+								return 0;
+							}
 							break;
 						case P_TUNNELID:
 							tid=atoi(argv[i + 1]);
