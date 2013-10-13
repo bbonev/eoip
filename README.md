@@ -1,7 +1,7 @@
 EOIP
 ====
 
-Kernel mode EOIP (Ethernet over IP) tunnel compatible with MikroTik RouterOS
+Kernel mode EOIP (Ethernet Over IP) tunnel compatible with MikroTik RouterOS
 
 There are several projects doing the same job with userland utilities via tap interfaces and raw sockets. While a userland application is easier to install and maintain it lacks the perfomance and stability of an in-kernel module. Especially for the simple job of adding and stripping the EOIP tunneling headers. The userland tunneling application may be good for testing, research or concept proof projects but not suitable for production environments with high bandwidth requirements.
 
@@ -14,7 +14,7 @@ This project's goals are:
 Install
 -------
 
-This code is tested on a 3.2.44 linux kernel. It should not be hard to adapt it to newer or older kernels.
+This code was developed on a 3.2.44 linux kernel and tested up to 3.2.51. It should not be hard to adapt it to older kernels and 3.4.x series. Bigger changes are required for 3.10+ kernel series.
 
 - To patch a kernel tree:
 
@@ -41,10 +41,10 @@ make install
 
 For this to work at least the running kernel's headers should be available.
 
-This build process will place the modules in /lib/modules/x.x.x.x/misc. Note that there will be two versions of gre.ko (the GRE demux).
-At least on 3.2.44 it is safe to replace the original version with the modified one it is backward compatible.
+On Debian/Ubuntu systems this build process will place the newly built modules in `/lib/modules/x.x.x.x/misc`. Note that there will be two versions of `gre.ko` (the GRE demux).
+At least on 3.2.x it is safe to replace the original version with the modified one because it is backwards compatible.
 
-For eoip protocol to operate properly at least the new version of GRE demux should be loaded first.
+The `eoip.ko` module cannot operate properly without the newly built version of GRE demux (`gre.ko`). If the original `gre.ko` is loaded then it should be removed and the newly built `gre.ko` loaded before loading `eoip.ko`.
 
 - To build the userland management utility `eoip`:
 
@@ -100,10 +100,10 @@ The protocol is not documented and although it looks like there are no deviation
 Protocol spec
 -------------
 
-After IP header (which can be fragmented, MTU 1500 is usually used for tunnels)
-GRE-like datagram follows. Note that it's nothing like RFC 1701 MikroTik mentioned in their docs:
+After the IP header (which can be fragmented, MTU 1500 is usually used for tunnels) a GRE-like datagram follows.
+Note that RFC 1701 is mentioned in MikroTik's docs but there is nothing in common between the standard and the actual protocol used.
 
-Header format (taken from https://github.com/katuma/eoip)
+Header format (taken from https://github.com/katuma/eoip):
 
     
      0                   1                   2                   3
@@ -116,13 +116,17 @@ Header format (taken from https://github.com/katuma/eoip)
     | Ethernet frame...                                             |
 
 
-Strangely enough the frame length is kept into network byte order and tunnel id in little endian byte order
+Strangely enough the frame length is kept into network byte order and tunnel ID is in little endian byte order.
 
 
 Bugs
 ----
 
-Consider this code as in early alpha - it is not yet well tested and probably there are lots of bugs inside.
+This code was tested and works without problems on quite a few different 32/64bit x86 systems.
+
+No testing was done on non-x86 and big endian hardware.
+
+There is no guarantee that there are no bugs left. Patches are welcome.
 
 
 License
