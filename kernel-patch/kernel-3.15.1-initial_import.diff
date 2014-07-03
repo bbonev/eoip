@@ -1,9 +1,52 @@
-
-Signed-off-by: Boian Bonev <bbonev@ipacct.com>
-
---- linux-3.2.45/net/ipv4/eoip.c.orig	1970-01-01 02:00:00.000000000 +0200
-+++ linux-3.2.45/net/ipv4/eoip.c	2013-05-17 04:26:51.784514446 +0300
-@@ -0,0 +1,933 @@
+diff --git a/net/ipv4/Kconfig b/net/ipv4/Kconfig
+index 05c57f0..6cf3370 100644
+--- a/net/ipv4/Kconfig
++++ b/net/ipv4/Kconfig
+@@ -182,7 +182,7 @@ config NET_IPGRE_DEMUX
+ 	tristate "IP: GRE demultiplexer"
+ 	help
+ 	 This is helper module to demultiplex GRE packets on GRE version field criteria.
+-	 Required by ip_gre and pptp modules.
++	 Required by ip_gre, pptp and eoip modules.
+ 
+ config NET_IP_TUNNEL
+ 	tristate
+@@ -212,6 +212,17 @@ config NET_IPGRE_BROADCAST
+ 	  Network), but can be distributed all over the Internet. If you want
+ 	  to do that, say Y here and to "IP multicast routing" below.
+ 
++config NET_EOIP
++	tristate "IP: EOIP ethernet tunnels over IP"
++	depends on (IPV6 || IPV6=n) && NET_IPGRE_DEMUX
++	help
++	  Tunneling means encapsulating data of one protocol type within
++	  another protocol and sending it over a channel that understands the
++	  encapsulating protocol. This particular tunneling driver implements
++	  MikroTik RouterOS compatible encapsulation of ethernet frames over
++	  existing IPv4 infrastructure. It is useful if the other endpoint
++	  is a MirkoTik router.
++
+ config IP_MROUTE
+ 	bool "IP: multicast routing"
+ 	depends on IP_MULTICAST
+diff --git a/net/ipv4/Makefile b/net/ipv4/Makefile
+index f032688..630df82 100644
+--- a/net/ipv4/Makefile
++++ b/net/ipv4/Makefile
+@@ -22,6 +22,7 @@ obj-$(CONFIG_NET_IPIP) += ipip.o
+ gre-y := gre_demux.o
+ obj-$(CONFIG_NET_IPGRE_DEMUX) += gre.o
+ obj-$(CONFIG_NET_IPGRE) += ip_gre.o
++obj-$(CONFIG_NET_EOIP) += eoip.o
+ obj-$(CONFIG_NET_IPVTI) += ip_vti.o
+ obj-$(CONFIG_SYN_COOKIES) += syncookies.o
+ obj-$(CONFIG_INET_AH) += ah4.o
+diff --git a/net/ipv4/eoip.c b/net/ipv4/eoip.c
+new file mode 100644
+index 0000000..70e13c2
+--- /dev/null
++++ b/net/ipv4/eoip.c
+@@ -0,0 +1,931 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
@@ -44,7 +87,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +#include <net/ip.h>
 +#include <net/icmp.h>
 +#include <net/protocol.h>
-+#include <net/ipip.h>
++//#include <net/ipip.h>
 +#include <net/arp.h>
 +#include <net/checksum.h>
 +#include <net/dsfield.h>
@@ -412,7 +455,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +		tstats->rx_packets++;
 +		tstats->rx_bytes += skb->len;
 +
-+		__skb_tunnel_rx(skb, tunnel->dev);
++		__skb_tunnel_rx(skb, tunnel->dev, tunnel->net);
 +
 +		skb_reset_network_header(skb);
 +
@@ -433,7 +476,6 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
 +{
 +	struct ip_tunnel *tunnel = netdev_priv(dev);
-+	struct pcpu_tstats *tstats;
 +	const struct iphdr *old_iph = ip_hdr(skb);
 +	const struct iphdr *tiph;
 +	struct flowi4 fl4;
@@ -475,7 +517,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	mtu = skb_dst(skb) ? dst_mtu(skb_dst(skb)) : dev->mtu;
 +
 +	if (skb_dst(skb))
-+		skb_dst(skb)->ops->update_pmtu(skb_dst(skb), mtu);
++		skb_dst(skb)->ops->update_pmtu(skb_dst(skb), NULL, skb, mtu);
 +
 +	if (tunnel->err_count > 0) {
 +		if (time_before(jiffies,
@@ -542,8 +584,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	((__le16 *)(iph + 1))[3] = cpu_to_le16(tunnel->parms.i_key);
 +
 +	nf_reset(skb);
-+	tstats = this_cpu_ptr(dev->tstats);
-+	__IPTUNNEL_XMIT(tstats, &dev->stats);
++	ip_tunnel_xmit(skb, dev, iph, iph->protocol);
 +	return NETDEV_TX_OK;
 +
 +tx_error:
@@ -856,12 +897,12 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	struct ip_tunnel *t = netdev_priv(dev);
 +	struct ip_tunnel_parm *p = &t->parms;
 +
-+	NLA_PUT_U32(skb, IFLA_GRE_LINK, p->link);
-+	NLA_PUT_BE32(skb, IFLA_GRE_IKEY, p->i_key);
-+	NLA_PUT_BE32(skb, IFLA_GRE_LOCAL, p->iph.saddr);
-+	NLA_PUT_BE32(skb, IFLA_GRE_REMOTE, p->iph.daddr);
-+	NLA_PUT_U8(skb, IFLA_GRE_TTL, p->iph.ttl);
-+	NLA_PUT_U8(skb, IFLA_GRE_TOS, p->iph.tos);
++	nla_put_u32(skb, IFLA_GRE_LINK, p->link);
++	nla_put_be32(skb, IFLA_GRE_IKEY, p->i_key);
++	nla_put_be32(skb, IFLA_GRE_LOCAL, p->iph.saddr);
++	nla_put_be32(skb, IFLA_GRE_REMOTE, p->iph.daddr);
++	nla_put_u8(skb, IFLA_GRE_TTL, p->iph.ttl);
++	nla_put_u8(skb, IFLA_GRE_TOS, p->iph.tos);
 +
 +	return 0;
 +
@@ -937,3 +978,87 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +module_exit(eoip_fini);
 +MODULE_LICENSE("GPL");
 +MODULE_ALIAS_RTNL_LINK("eoip");
+diff --git a/net/ipv4/gre_demux.c b/net/ipv4/gre_demux.c
+index 250be74..5cce1e3 100644
+--- a/net/ipv4/gre_demux.c
++++ b/net/ipv4/gre_demux.c
+@@ -30,13 +30,19 @@
+ #include <net/route.h>
+ #include <net/xfrm.h>
+ 
+-static const struct gre_protocol __rcu *gre_proto[GREPROTO_MAX] __read_mostly;
++#define GREPROTO_CNT (GREPROTO_MAX + GREPROTO_NONSTD_MAX - GREPROTO_NONSTD_BASE)
++
++static const struct gre_protocol __rcu *gre_proto[GREPROTO_CNT] __read_mostly;
+ static struct gre_cisco_protocol __rcu *gre_cisco_proto_list[GRE_IP_PROTO_MAX];
+ 
++
+ int gre_add_protocol(const struct gre_protocol *proto, u8 version)
+ {
+-	if (version >= GREPROTO_MAX)
+-		return -EINVAL;
++        if (version >= GREPROTO_NONSTD_BASE && version < GREPROTO_NONSTD_MAX)
++                version -= GREPROTO_NONSTD_BASE - GREPROTO_MAX;
++        else
++                if (version >= GREPROTO_MAX)
++                        return -EINVAL;
+ 
+ 	return (cmpxchg((const struct gre_protocol **)&gre_proto[version], NULL, proto) == NULL) ?
+ 		0 : -EBUSY;
+@@ -47,8 +53,11 @@ int gre_del_protocol(const struct gre_protocol *proto, u8 version)
+ {
+ 	int ret;
+ 
+-	if (version >= GREPROTO_MAX)
+-		return -EINVAL;
++	if (version >= GREPROTO_NONSTD_BASE && version < GREPROTO_NONSTD_MAX)
++		version -= GREPROTO_NONSTD_BASE - GREPROTO_MAX;
++	else
++		if (version >= GREPROTO_MAX)
++			return -EINVAL;
+ 
+ 	ret = (cmpxchg((const struct gre_protocol **)&gre_proto[version], proto, NULL) == proto) ?
+ 		0 : -EBUSY;
+@@ -278,9 +287,16 @@ static int gre_rcv(struct sk_buff *skb)
+ 	if (!pskb_may_pull(skb, 12))
+ 		goto drop;
+ 
+-	ver = skb->data[1]&0x7f;
+-	if (ver >= GREPROTO_MAX)
+-		goto drop;
++	/* check for custom EOIP header */
++	if (skb->data[0] == 0x20 && skb->data[1] == 0x01 &&
++			skb->data[2] == 0x64 && skb->data[3] == 0x00)
++		ver = GREPROTO_NONSTD_EOIP - GREPROTO_NONSTD_BASE
++				+ GREPROTO_MAX;
++	else {
++		ver = skb->data[1]&0x7f;
++		if (ver >= GREPROTO_MAX)
++			goto drop;
++	}
+ 
+ 	rcu_read_lock();
+ 	proto = rcu_dereference(gre_proto[ver]);
+@@ -301,10 +317,19 @@ static void gre_err(struct sk_buff *skb, u32 info)
+ {
+ 	const struct gre_protocol *proto;
+ 	const struct iphdr *iph = (const struct iphdr *)skb->data;
+-	u8 ver = skb->data[(iph->ihl<<2) + 1]&0x7f;
++	u8 ver;
+ 
+-	if (ver >= GREPROTO_MAX)
+-		return;
++	if (skb->data[(iph->ihl<<2) + 0] == 0x20 &&
++			skb->data[(iph->ihl<<2) + 1] == 0x01 &&
++			skb->data[(iph->ihl<<2) + 2] == 0x64 &&
++			skb->data[(iph->ihl<<2) + 3] == 0x00)
++		ver = GREPROTO_NONSTD_EOIP - GREPROTO_NONSTD_BASE
++				+ GREPROTO_MAX;
++	else {
++		ver = skb->data[(iph->ihl<<2) + 1]&0x7f;
++		if (ver >= GREPROTO_MAX)
++			return;
++	}
+ 
+ 	rcu_read_lock();
+ 	proto = rcu_dereference(gre_proto[ver]);
