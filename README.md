@@ -34,7 +34,7 @@ Besides on embedded systems it is recommended to build EOIP and GRE demux as mod
 - To build the modules out of the kernel tree:
 
 ```
-cd path-to-eoip/out-of-tree
+cd path-to-eoip/out-of-tree-X.Y.Z
 make
 make install
 ```
