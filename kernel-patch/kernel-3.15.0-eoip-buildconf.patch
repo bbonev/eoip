@@ -1,0 +1,39 @@
+--- linux-3.15/net/ipv4/Makefile.orig	2014-06-14 00:22:46.749706936 +0300
++++ linux-3.15/net/ipv4/Makefile	2014-06-14 00:23:53.257704010 +0300
+@@ -23,6 +23,7 @@ gre-y := gre_demux.o
+ obj-$(CONFIG_NET_IPGRE_DEMUX) += gre.o
+ obj-$(CONFIG_NET_IPGRE) += ip_gre.o
+ obj-$(CONFIG_NET_IPVTI) += ip_vti.o
++obj-$(CONFIG_NET_EOIP) += eoip.o
+ obj-$(CONFIG_SYN_COOKIES) += syncookies.o
+ obj-$(CONFIG_INET_AH) += ah4.o
+ obj-$(CONFIG_INET_ESP) += esp4.o
+--- linux-3.15/net/ipv4/Kconfig.orig	2014-06-14 00:18:28.437718301 +0300
++++ linux-3.15/net/ipv4/Kconfig	2014-06-14 00:22:32.273707573 +0300
+@@ -182,7 +182,7 @@ config NET_IPGRE_DEMUX
+ 	tristate "IP: GRE demultiplexer"
+ 	help
+ 	 This is helper module to demultiplex GRE packets on GRE version field criteria.
+-	 Required by ip_gre and pptp modules.
++	 Required by ip_gre, pptp and eoip modules.
+ 
+ config NET_IP_TUNNEL
+ 	tristate
+@@ -212,6 +212,17 @@ config NET_IPGRE_BROADCAST
+ 	  Network), but can be distributed all over the Internet. If you want
+ 	  to do that, say Y here and to "IP multicast routing" below.
+ 
++config NET_EOIP
++	tristate "IP: EOIP ethernet tunnels over IP"
++	depends on (IPV6 || IPV6=n) && NET_IPGRE_DEMUX
++	help
++	  Tunneling means encapsulating data of one protocol type within
++	  another protocol and sending it over a channel that understands the
++	  encapsulating protocol. This particular tunneling driver implements
++	  MikroTik RouterOS compatible encapsulation of ethernet frames over
++	  existing IPv4 infrastructure. It is useful if the other endpoint
++	  is a MirkoTik router.
++
+ config IP_MROUTE
+ 	bool "IP: multicast routing"
+ 	depends on IP_MULTICAST
