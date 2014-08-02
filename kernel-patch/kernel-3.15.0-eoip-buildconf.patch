@@ -32,7 +32,7 @@
 +	  encapsulating protocol. This particular tunneling driver implements
 +	  MikroTik RouterOS compatible encapsulation of ethernet frames over
 +	  existing IPv4 infrastructure. It is useful if the other endpoint
-+	  is a MirkoTik router.
++	  is a MikroTik router.
 +
  config IP_MROUTE
  	bool "IP: multicast routing"
