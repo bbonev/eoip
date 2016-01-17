@@ -227,7 +227,7 @@
 +	else
 +		strcpy(name, "eoip%d");
 +
-+	dev = alloc_netdev(sizeof(*t), name, eoip_setup);
++	dev = alloc_netdev(sizeof(*t), name, NET_NAME_UNKNOWN, eoip_setup);
 +	if (!dev)
 +		return NULL;
 +
@@ -428,7 +428,7 @@
 +	int pkt_len = skb->len - skb_transport_offset(skb);     \
 +														\
 +	skb->ip_summed = CHECKSUM_NONE;                 \
-+	ip_select_ident(skb, &rt->dst, NULL);               \
++	ip_select_ident(skb, NULL);               \
 +                                    \
 +	err = ip_local_out(skb);                    \
 +	if (likely(net_xmit_eval(err) == 0)) {              \
