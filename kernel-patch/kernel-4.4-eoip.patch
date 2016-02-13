@@ -1,9 +1,9 @@
-
-Signed-off-by: Boian Bonev <bbonev@ipacct.com>
-
---- linux-3.2.45/net/ipv4/eoip.c.orig	1970-01-01 02:00:00.000000000 +0200
-+++ linux-3.2.45/net/ipv4/eoip.c	2013-05-17 04:26:51.784514446 +0300
-@@ -0,0 +1,933 @@
+diff --git c/net/ipv4/eoip.c w/net/ipv4/eoip.c
+new file mode 100644
+index 0000000..f4dfdae
+--- /dev/null
++++ w/net/ipv4/eoip.c
+@@ -0,0 +1,948 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
@@ -44,7 +44,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +#include <net/ip.h>
 +#include <net/icmp.h>
 +#include <net/protocol.h>
-+#include <net/ipip.h>
++//#include <net/ipip.h>
 +#include <net/arp.h>
 +#include <net/checksum.h>
 +#include <net/dsfield.h>
@@ -81,9 +81,6 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 + * Locking : hash tables are protected by RCU and RTNL
 + */
 +
-+#define for_each_ip_tunnel_rcu(start) \
-+	for (t = rcu_dereference(start); t; t = rcu_dereference(t->next))
-+
 +/* often modified stats are per cpu, other are shared (netdev->stats) */
 +struct pcpu_tstats {
 +	unsigned long rx_packets;
@@ -94,11 +91,11 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +
 +static struct net_device_stats *eoip_if_get_stats(struct net_device *dev)
 +{
-+	struct pcpu_tstats sum = { 0 };
++	struct pcpu_sw_netstats sum = { 0 };
 +	int i;
 +
 +	for_each_possible_cpu(i) {
-+		const struct pcpu_tstats *tstats = per_cpu_ptr(dev->tstats, i);
++		const struct pcpu_sw_netstats *tstats = per_cpu_ptr(dev->tstats, i);
 +
 +		sum.rx_packets += tstats->rx_packets;
 +		sum.rx_bytes += tstats->rx_bytes;
@@ -126,7 +123,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	int dev_type = ARPHRD_ETHER;
 +	int score, cand_score = 4;
 +
-+	for_each_ip_tunnel_rcu(ign->tunnels[h0]) {
++	for_each_ip_tunnel_rcu(t, ign->tunnels[h0]) {
 +		if (local != t->parms.iph.saddr ||
 +				remote != t->parms.iph.daddr ||
 +				key != t->parms.i_key ||
@@ -233,7 +230,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	else
 +		strcpy(name, "eoip%d");
 +
-+	dev = alloc_netdev(sizeof(*t), name, eoip_setup);
++	dev = alloc_netdev(sizeof(*t), name, NET_NAME_UNKNOWN, eoip_setup);
 +	if (!dev)
 +		return NULL;
 +
@@ -377,7 +374,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +
 +	tunnel = eoip_tunnel_lookup(skb->dev, iph->saddr, iph->daddr, key);
 +	if (tunnel) {
-+		struct pcpu_tstats *tstats;
++		struct pcpu_sw_netstats *tstats;
 +
 +		secpath_reset(skb);
 +
@@ -412,7 +409,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +		tstats->rx_packets++;
 +		tstats->rx_bytes += skb->len;
 +
-+		__skb_tunnel_rx(skb, tunnel->dev);
++		__skb_tunnel_rx(skb, tunnel->dev, dev_net(tunnel->dev));
 +
 +		skb_reset_network_header(skb);
 +
@@ -429,11 +426,27 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	kfree_skb(skb);
 +	return 0;
 +}
++#define __IPTUNNEL_XMIT(stats1, stats2, net) do {                \
++	int err;                            \
++	int pkt_len = skb->len - skb_transport_offset(skb);     \
++														\
++	skb->ip_summed = CHECKSUM_NONE;                 \
++	ip_select_ident(net, skb, NULL);               \
++                                    \
++	err = ip_local_out(dev_net(skb_dst(skb)->dev), skb->sk, skb);                    \
++	if (likely(net_xmit_eval(err) == 0)) {              \
++		(stats1)->tx_bytes += pkt_len;              \
++		(stats1)->tx_packets++;                 \
++	} else {                            \
++		(stats2)->tx_errors++;                  \
++		(stats2)->tx_aborted_errors++;              \
++	}                               \
++} while (0)
 +
 +static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
 +{
 +	struct ip_tunnel *tunnel = netdev_priv(dev);
-+	struct pcpu_tstats *tstats;
++	struct pcpu_sw_netstats *tstats;
 +	const struct iphdr *old_iph = ip_hdr(skb);
 +	const struct iphdr *tiph;
 +	struct flowi4 fl4;
@@ -475,7 +488,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	mtu = skb_dst(skb) ? dst_mtu(skb_dst(skb)) : dev->mtu;
 +
 +	if (skb_dst(skb))
-+		skb_dst(skb)->ops->update_pmtu(skb_dst(skb), mtu);
++		skb_dst(skb)->ops->update_pmtu(skb_dst(skb), NULL, skb, mtu);
 +
 +	if (tunnel->err_count > 0) {
 +		if (time_before(jiffies,
@@ -517,7 +530,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	skb_dst_set(skb, &rt->dst);
 +
 +	/*
-+	 *	Push down and install the IPIP header.
++	 *	Push down and install the EOIP header.
 +	 */
 +
 +	iph = ip_hdr(skb);
@@ -543,7 +556,8 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +
 +	nf_reset(skb);
 +	tstats = this_cpu_ptr(dev->tstats);
-+	__IPTUNNEL_XMIT(tstats, &dev->stats);
++	__IPTUNNEL_XMIT(tstats, &dev->stats,dev_net(rt->dst.dev));
++	//ip_tunnel_xmit(skb, dev, tiph, tiph->protocol);
 +	return NETDEV_TX_OK;
 +
 +tx_error:
@@ -588,7 +602,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +		hlen = tdev->hard_header_len + tdev->needed_headroom;
 +		mtu = tdev->mtu;
 +	}
-+	dev->iflink = tunnel->parms.link;
++	// dev->iflink = tunnel->parms.link;
 +
 +	dev->needed_headroom = addend + hlen;
 +	mtu -= dev->hard_header_len + addend;
@@ -730,7 +744,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +
 +	eoip_tunnel_bind_dev(dev);
 +
-+	dev->tstats = alloc_percpu(struct pcpu_tstats);
++	dev->tstats = alloc_percpu(struct pcpu_sw_netstats);
 +	if (!dev->tstats)
 +		return -ENOMEM;
 +
@@ -754,7 +768,7 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	dev->netdev_ops = &eoip_netdev_ops;
 +	dev->destructor = eoip_dev_free;
 +
-+	dev->iflink = 0;
++	// dev->iflink = 0;
 +	dev->features |= NETIF_F_NETNS_LOCAL;
 +}
 +
@@ -856,12 +870,13 @@ Signed-off-by: Boian Bonev <bbonev@ipacct.com>
 +	struct ip_tunnel *t = netdev_priv(dev);
 +	struct ip_tunnel_parm *p = &t->parms;
 +
-+	NLA_PUT_U32(skb, IFLA_GRE_LINK, p->link);
-+	NLA_PUT_BE32(skb, IFLA_GRE_IKEY, p->i_key);
-+	NLA_PUT_BE32(skb, IFLA_GRE_LOCAL, p->iph.saddr);
-+	NLA_PUT_BE32(skb, IFLA_GRE_REMOTE, p->iph.daddr);
-+	NLA_PUT_U8(skb, IFLA_GRE_TTL, p->iph.ttl);
-+	NLA_PUT_U8(skb, IFLA_GRE_TOS, p->iph.tos);
++	if (nla_put_u32(skb, IFLA_GRE_LINK, p->link) ||
++		nla_put_be32(skb, IFLA_GRE_IKEY, p->i_key) ||
++		nla_put_be32(skb, IFLA_GRE_LOCAL, p->iph.saddr) ||
++		nla_put_be32(skb, IFLA_GRE_REMOTE, p->iph.daddr) ||
++		nla_put_u8(skb, IFLA_GRE_TTL, p->iph.ttl) ||
++		nla_put_u8(skb, IFLA_GRE_TOS, p->iph.tos))
++		goto nla_put_failure;
 +
 +	return 0;
 +
