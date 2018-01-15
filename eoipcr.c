@@ -204,7 +204,7 @@ static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t 
 		.nl_family = AF_NETLINK,
 	};
 
-	req.msg.nlmsg_len=NLMSG_LENGTH((char *)&req.dummy-(char *)&req);
+	req.msg.nlmsg_len=(char *)&req.dummy-(char *)&req;
 
 	req.a_name.rta_len=(char *)&req.a_lnfo-(char *)&req.a_name;
 	req.a_lnfo.rta_len=(char *)&req.dummy-(char *)&req.a_lnfo;
