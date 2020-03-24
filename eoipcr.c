@@ -135,7 +135,7 @@ static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t 
 
 	if (rtnl_open(&rth, 0)) {
 		fprintf(stderr, "cannot open netlink\n");
-		return 1;
+		return -1;
 	}
 
 	if (rtnl_talk(&rth, &req.msg, 0, 0, NULL) < 0) {
