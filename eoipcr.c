@@ -99,156 +99,51 @@ void list(void) {
 	rtnl_close(&rth);
 }
 
-int rtnetlink_request(struct nlmsghdr *msg, int buflen, struct sockaddr_nl *adr) {
-	int rsk;
-	int n;
-
-	/* Use a private socket to avoid having to keep state for a sequence number. */
-	rsk = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-	if (rsk < 0)
-		return -1;
-	n = sendto(rsk, msg, msg->nlmsg_len, 0, (struct sockaddr *)adr, sizeof(struct sockaddr_nl));
-	if (errno)
-		perror("in send");
-	close(rsk);
-	if (n < 0)
-		return -1;
-	return 0;
-}
-
 static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t dip,uint32_t link,uint8_t ttl,uint8_t tos) {
 	struct {
 		struct nlmsghdr msg;
 		struct ifinfomsg ifi;
-		struct rtattr a_name;
-		char ifname[IFNAMSIZ];
-		struct rtattr a_lnfo;
-		struct rtattr a_kind;
-		char kind[8];
-		struct rtattr a_data;
-		struct rtattr a_ikey;
-		uint32_t ikey;
-		struct rtattr a_sa;
-		uint32_t sa;
-		struct rtattr a_da;
-		uint32_t da;
-		struct rtattr a_link;
-		uint32_t link;
-		struct rtattr a_ttl;
-		uint8_t ttl;
-		uint8_t ttlpad[3];
-		struct rtattr a_tos;
-		uint8_t tos;
-		uint8_t tospad[3];
-		uint32_t dummy[50];
-	} req = {
-		.msg = {
-			.nlmsg_len = 0, // fix me later
-			.nlmsg_type = RTM_NEWLINK,
-			.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|(excl ? NLM_F_EXCL : 0),
-		},
-		.ifi = {
-			.ifi_family = AF_UNSPEC,
-			.ifi_index = 0,
-		},
-		.a_name = {
-			.rta_len = IFNAMSIZ + sizeof(struct rtattr),
-			.rta_type = IFLA_IFNAME,
-		},
-		.ifname="",
-		.a_lnfo = {
-			.rta_len = 0, // fix me later
-			.rta_type = IFLA_LINKINFO,
-		},
-		.a_kind = {
-			.rta_len = 8 + sizeof(struct rtattr),
-			.rta_type = IFLA_INFO_KIND,
-		},
-		.kind="eoip",
-		.a_data = {
-			.rta_len = 0, // fix me later
-			.rta_type = IFLA_INFO_DATA,
-		},
-		.a_ikey = {
-			.rta_len = 4 + sizeof(struct rtattr),
-			.rta_type = IFLA_GRE_IKEY,
-		},
-		.ikey=4321,
-		.a_sa = {
-			.rta_len = 4 + sizeof(struct rtattr),
-			.rta_type = IFLA_GRE_LOCAL,
-		},
-		.sa=htonl(0),
-		.a_da = {
-			.rta_len = 4 + sizeof(struct rtattr),
-			.rta_type = IFLA_GRE_REMOTE,
-		},
-		.da=htonl(0),
-		.a_link = {
-			.rta_len = 4 + sizeof(struct rtattr),
-			.rta_type = IFLA_GRE_LINK,
-		},
-		.link=0,
-		.a_ttl = {
-			.rta_len = 4 + sizeof(struct rtattr),
-			.rta_type = IFLA_GRE_TTL,
-		},
-		.ttl=0,
-		.a_tos = {
-			.rta_len = 4 + sizeof(struct rtattr),
-			.rta_type = IFLA_GRE_TOS,
-		},
-		.tos=0,
-	};
-	struct sockaddr_nl adr = {
-		.nl_family = AF_NETLINK,
-	};
+		uint8_t buf[1024];
+	} req;
+	struct rtnl_handle rth = { .fd = -1 };
+	struct rtattr *lnfo;
+	struct rtattr *data;
 
-	req.msg.nlmsg_len=(char *)&req.dummy-(char *)&req;
+	memset(&req, 0, sizeof(req));
+	req.msg.nlmsg_type = RTM_NEWLINK;
+	req.msg.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+	req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | (excl ? NLM_F_EXCL : 0);
+	req.ifi.ifi_family = AF_UNSPEC;
 
-	req.a_name.rta_len=(char *)&req.a_lnfo-(char *)&req.a_name;
-	req.a_lnfo.rta_len=(char *)&req.dummy-(char *)&req.a_lnfo;
-	req.a_kind.rta_len=(char *)&req.a_data-(char *)&req.a_kind;
-	req.a_data.rta_len=(char *)&req.dummy-(char *)&req.a_data;
-	req.a_ikey.rta_len=(char *)&req.a_sa-(char *)&req.a_ikey;
-	req.a_sa.rta_len=(char *)&req.a_da-(char *)&req.a_sa;
-	req.a_da.rta_len=(char *)&req.a_link-(char *)&req.a_da;
-	req.a_link.rta_len=(char *)&req.a_ttl-(char *)&req.a_link;
-	req.a_ttl.rta_len=(char *)&req.a_tos-(char *)&req.a_ttl;
-	req.a_tos.rta_len=(char *)&req.dummy-(char *)&req.a_tos;
+	addattr_l(&req.msg, sizeof(req), IFLA_IFNAME, name, strlen(name));
+	lnfo = NLMSG_TAIL(&req.msg);
+	addattr_l(&req.msg, sizeof(req), IFLA_LINKINFO, NULL, 0);
+	addattr_l(&req.msg, sizeof(req), IFLA_INFO_KIND, "eoip", strlen("eoip"));
+	data = NLMSG_TAIL(&req.msg);
+	addattr_l(&req.msg, sizeof(req), IFLA_INFO_DATA, NULL, 0);
 
-	req.sa = sip;
-	req.da = dip;
-	strcpy(req.ifname, name);
-	req.ikey = tunnelid;
-	req.link = link;
-	req.ttl = ttl;
-	req.tos = tos;
-	if (0) {
-		unsigned char *p=(unsigned char *)&req;
-		int l=(char *)&req.dummy-(char *)&req;
-		int i;
+	addattr32(&req.msg, sizeof(req), IFLA_GRE_IKEY, tunnelid);
+	addattr32(&req.msg, sizeof(req), IFLA_GRE_LOCAL, sip);
+	addattr32(&req.msg, sizeof(req), IFLA_GRE_REMOTE, dip);
+	addattr32(&req.msg, sizeof(req), IFLA_GRE_LINK, link);
+	addattr8(&req.msg, sizeof(req), IFLA_GRE_TTL, ttl);
+	addattr8(&req.msg, sizeof(req), IFLA_GRE_TOS, tos);
 
-		printf("req size: %d\n",req.msg.nlmsg_len);
-		printf("name size: %d\n",req.a_name.rta_len);
-		printf("lnfo size: %d\n",req.a_lnfo.rta_len);
-		printf("kind size: %d\n",req.a_kind.rta_len);
-		printf("data size: %d\n",req.a_data.rta_len);
-		printf("ikey size: %d\n",req.a_ikey.rta_len);
-		printf("sadr size: %d\n",req.a_sa.rta_len);
-		printf("dadr size: %d\n",req.a_da.rta_len);
+	data->rta_len = (void *)NLMSG_TAIL(&req.msg) - (void *)data;
+	lnfo->rta_len = (void *)NLMSG_TAIL(&req.msg) - (void *)lnfo;
 
-		printf("packet size: %d, data dump:",l);
 
-		for (i=0;i<l;i++)
-			printf("%s%02x",(!(i%16))?"\n":" ",p[i]);
-		fflush(stdout);
+	if (rtnl_open(&rth, 0)) {
+		fprintf(stderr, "cannot open netlink\n");
+		return 1;
 	}
 
-	if (rtnetlink_request(&req.msg, sizeof req, &adr) < 0) {
-		perror("error in netlink request");
+	if (rtnl_talk(&rth, &req.msg, 0, 0, NULL) < 0) {
+		fprintf(stderr, "failed to talk to netlink!\n");
 		return -1;
 	}
+
+	rtnl_close(&rth);
 	return 0;
 }
 
