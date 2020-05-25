@@ -59,6 +59,8 @@ Userland management utility
 
 ##### `eoip` - tunnel management utility
 
+Normally EoIP tunnels in MikroTiks work well with specifying only remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have local IP address configured and equal the the remote IP address on the other end.
+
 - to create new eoip tunnel interface:
 
 ```
