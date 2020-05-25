@@ -59,7 +59,19 @@ Userland management utility
 
 ##### `eoip` - tunnel management utility
 
-Normally EoIP tunnels in MikroTiks work well with specifying only remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have local IP address configured and equal the the remote IP address on the other end.
+##### Important notes:
+
+- Normally EoIP tunnels in MikroTiks work well with specifying only remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have local IP address configured and equal the the remote IP address on the other end.
+
+- This code does not support the keepalive option; configure the tunnel on MikroTik's end with `!keepalive`.
+
+- It is a good idea to use IP fragmentation and to set MTU on both ends to 1500; using `clamp-tcp-mss` is pointless in this case. For performance it is best if the transport network's MTU is 42+tunnel MTU (42 bytes is the EoIP protocol overhead) but obviously that is not the case over the Internet.
+
+- The EoIP protocol is connection-less and requires both ends to be able to reach the other end. In case only one end has a public IP, the other end may establish a private network by using another protocol that works over NAT (e.g. `PPTP`, `L2TP`, etc.) and run EoIP over the newly established private network.
+
+- Security warning: EoIP is a simple encapsulation and does implement any transport security.
+
+##### Usage:
 
 - to create new eoip tunnel interface:
 
@@ -83,6 +95,18 @@ Normally EoIP tunnels in MikroTiks work well with specifying only remote IP addr
     eoip list
 ```
 
+##### Example:
+
+To build an Ethernet tunnel between a MikroTik with IP 198.51.100.11 and a Linux box with IP 203.0.113.50 with tunnel id 1234:
+
+On MikroTik:
+
+`/interface eoip add clamp-tcp-mss=no !keepalive local-address=198.51.100.11 remote-address=203.0.113.50 tunnel-id=1234 mtu=1500 name=eoip1234`
+
+On Linux:
+
+`eoip add name eoip1234 local 203.0.113.50 remote 198.51.100.11 tunnel-id 1234`
+
 
 Roadmap
 -------
@@ -95,7 +119,7 @@ The inclusion of a reverse-engineered proprietary protocol which violates GRE st
 
 The problem in making a stand-alone EoIP kernel module is that it requires replacing gre_demux (`gre.ko`). Linux kernel does not support overloading IP protocol handlers and EoIP does not fit anywhere in the standard gre_demux logic. A relatively sane solution might be to include the GRE demultiplexing logic in the EoIP kernel module itself, to provide a `gre` alias and to blacklist the original `gre.ko`. In this way GRE and PPTP would still be able to coexist with EoIP.
 
-- make DKMS package
+- make a DKMS package
 
 
 Development process
