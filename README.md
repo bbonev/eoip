@@ -29,7 +29,7 @@ afterwards configure the kernel in the usual ways `make (menu/x/...)config` and 
 
 EOIP tunnel depends on `IP: GRE demultiplexer` - if it not selected then EOIP tunnel is not shown at all
 
-Besides on embedded systems it is recommended to build EOIP and GRE demux as modules.
+Unless the target is a limited embedded system, it is recommended to build EOIP and GRE demux as modules.
 
 - To build the modules out of the kernel tree:
 
