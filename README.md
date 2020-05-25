@@ -97,7 +97,7 @@ Userland management utility
 
 ##### Example:
 
-To build an Ethernet tunnel between a MikroTik with IP 198.51.100.11 and a Linux box with IP 203.0.113.50 with tunnel id 1234:
+To configure an Ethernet tunnel between a MikroTik with IP 198.51.100.11 and a Linux box with IP 203.0.113.50 with tunnel id 1234:
 
 On MikroTik:
 
