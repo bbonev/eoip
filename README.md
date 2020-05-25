@@ -85,9 +85,15 @@ Userland management utility
 Roadmap
 -------
 
-- make a patch for iproute2 to include eoip support
+- ~~make a patch for iproute2 to include eoip support~~
 
-- work towards making this code good enough for inclusion in official kernel/iproute2 releases
+- ~~work towards making this code good enough for inclusion in official kernel/iproute2 releases~~
+
+The inclusion of a reverse-engineered proprietary protocol which violates GRE standards is not going to happen in the official Linux kernel. Creating a patch for iproute2 is pointless as it would require patching and replacing one more component that in turn would make supporting a Linux system with kernel mode EoIP even harder. Thus using the included simple tool would be easier and preferred.
+
+The problem in making a stand-alone EoIP kernel module is that it requires replacing gre_demux (`gre.ko`). Linux kernel does not support overloading IP protocol handlers and EoIP does not fit anywhere in the standard gre_demux logic. A relatively sane solution might be to include the GRE demultiplexing logic in the EoIP kernel module itself, to provide a `gre` alias and to blacklist the original `gre.ko`. In this way GRE and PPTP would still be able to coexist with EoIP.
+
+- make DKMS package
 
 
 Development process
