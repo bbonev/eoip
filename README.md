@@ -61,13 +61,13 @@ Userland management utility
 
 ##### Important notes:
 
-- Normally EoIP tunnels in MikroTiks work well with specifying only remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have local IP address configured and equal the the remote IP address on the other end.
+- Normally EoIP tunnels in MikroTiks work well by only specifying the remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have the local IP address configured and equal the the remote IP address configured on the other end.
 
 - This code does not support the keepalive option; configure the tunnel on MikroTik's end with `!keepalive`.
 
-- It is a good idea to use IP fragmentation and to set MTU on both ends to 1500; using `clamp-tcp-mss` is pointless in this case. For performance it is best if the transport network's MTU is 42+tunnel MTU (42 bytes is the EoIP protocol overhead) but obviously that is not the case over the Internet.
+- It is a good idea to use IP fragmentation and to set MTU on both ends to 1500; using `clamp-tcp-mss` is pointless in this case. For performance it would be best if the transport network's MTU is 42+tunnel MTU (42 bytes is the EoIP protocol overhead) but obviously that is not the case over the Internet.
 
-- The EoIP protocol is connection-less and requires both ends to be able to reach the other end. In case only one end has a public IP, the other end may establish a private network by using another protocol that works over NAT (e.g. `PPTP`, `L2TP`, etc.) and run EoIP over the newly established private network.
+- The EoIP protocol is connection-less and requires both ends to be able to reach the other end. In case only one end has a public IP, the other end may establish a private network by using another protocol that works over NAT (e.g. `PPTP`, `L2TP`, etc.) and run EoIP on top of the newly established private network.
 
 - Security warning: EoIP is a simple encapsulation and does implement any transport security.
 
