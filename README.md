@@ -14,15 +14,15 @@ This project's goals are:
 Install
 -------
 
-This code was developed on a 3.2.44 linux kernel and tested up to 3.2.51. It should not be hard to adapt it to older kernels and 3.4.x series. Bigger changes are required for 3.10+ kernel series.
+This code was developed on a 3.2.44 linux kernel and tested on the next 3.2.x releases. Patches and out-of-tree builds are provided for 3.2/3.16/4.19 kernels. It should not be hard to adapt it to different Linux kernels. 
 
 - To patch a kernel tree:
 
 ```
-cd path-to-kernel-source/linux-3.2.44
-patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip-gre-demux.patch
-patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip-buildconf.patch
-patch -p1 < path-to-eoip/kernel-patch/kernel-3.2.44-eoip.patch
+cd path-to-kernel-source/linux-X.Y.Z
+patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip-gre-demux.patch
+patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip-buildconf.patch
+patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip.patch
 ```
 
 afterwards configure the kernel in the usual ways `make (menu/x/...)config` and do not forget to select `IP: EOIP tunnels over IP` located under `Networking options` from `Networking support`
@@ -42,7 +42,7 @@ make install
 For this to work at least the running kernel's headers should be available.
 
 On Debian/Ubuntu systems this build process will place the newly built modules in `/lib/modules/x.x.x.x/misc`. Note that there will be two versions of `gre.ko` (the GRE demux).
-At least on 3.2.x it is safe to replace the original version with the modified one because it is backwards compatible.
+At least on 3.2/3.16/4.19 it is safe to replace the original version with the modified one because it is backwards compatible.
 
 The `eoip.ko` module cannot operate properly without the newly built version of GRE demux (`gre.ko`). If the original `gre.ko` is loaded then it should be removed and the newly built `gre.ko` loaded before loading `eoip.ko`.
 
@@ -99,9 +99,9 @@ The problem in making a stand-alone EoIP kernel module is that it requires repla
 Development process
 -------------------
 
-This code was developed based on information gathered from sniffed datagrams and information from similar projects without involving any reverse engineering of code from the closed source commercial product
+This code was developed based on information gathered from sniffed datagrams and information from similar projects without involving any reverse engineering of code from the closed source commercial product.
 
-The protocol is not documented and although it looks like there are no deviations in the header format this cannot be guaranteed in all environments or for future releases of the commercial product
+The protocol is not documented and although it looks like there are no deviations in the header format this cannot be guaranteed in all environments or for future releases of the commercial product.
 
 Protocol spec
 -------------
@@ -122,7 +122,7 @@ Header format (taken from https://github.com/katuma/eoip):
     | Ethernet frame...                                             |
 
 
-Strangely enough the frame length is kept into network byte order and tunnel ID is in little endian byte order.
+Strangely enough the frame length is kept into network byte order while tunnel ID is in little endian byte order.
 
 
 Bugs
