@@ -121,6 +121,7 @@ The problem in making a stand-alone EoIP kernel module is that it requires repla
 
 - make a DKMS package
 
+- implement the `keepalive` option and probably make it the default
 
 Development process
 -------------------
