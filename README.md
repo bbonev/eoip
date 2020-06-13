@@ -52,7 +52,40 @@ The `eoip.ko` module cannot operate properly without the newly built version of 
 cd path-to-eoip
 make
 ```
+##### Example:
 
+This example may be used as a checklist for an out of tree build:
+
+```
+root@ubuntu-18_04:~/eoip# make
+cc -Wall -Os -c libnetlink.c
+cc -Wall -Os -o eoip eoipcr.c libnetlink.o
+strip eoip
+root@ubuntu-18_04:~/eoip# cd out-of-tree-4.15.x/
+root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# make
+patching file eoip.c
+using 4.15.0 version of gre_demux.c
+found running kernel version of gre.h
+patching file gre.h
+Hunk #1 succeeded at 24 (offset 15 lines).
+patching file gre_demux.c
+Hunk #3 succeeded at 137 (offset -9 lines).
+Hunk #4 succeeded at 173 (offset -9 lines).
+make[1]: Entering directory '/usr/src/linux-headers-4.15.0-106-generic'
+  CC [M]  /root/eoip/out-of-tree-4.15.x/eoip.o
+  CC [M]  /root/eoip/out-of-tree-4.15.x/gre.o
+  Building modules, stage 2.
+  MODPOST 2 modules
+  CC      /root/eoip/out-of-tree-4.15.x/eoip.mod.o
+  LD [M]  /root/eoip/out-of-tree-4.15.x/eoip.ko
+  CC      /root/eoip/out-of-tree-4.15.x/gre.mod.o
+  LD [M]  /root/eoip/out-of-tree-4.15.x/gre.ko
+make[1]: Leaving directory '/usr/src/linux-headers-4.15.0-106-generic'
+root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./gre.ko
+root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./eoip.ko 
+root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ../eoip add name eoip0 local local 203.0.113.113 remote 198.51.100.100 tunnel-id 8421
+root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ip li set eoip0 up
+```
 
 Userland management utility
 ---------------------------
