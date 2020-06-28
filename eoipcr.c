@@ -1,21 +1,15 @@
 #include <stdio.h>
-#include <errno.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <net/if.h>
-#include <net/if_arp.h>
-#include <sys/socket.h>
 #include <netinet/in.h>
-#include <linux/ip.h>
-#include <linux/netlink.h>
-#include <linux/rtnetlink.h>
 #include <linux/if_tunnel.h>
 
+#include "version.h"
 #include "libnetlink.h"
 
-int print_link(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg) {
+int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsghdr *n, void *arg __attribute((unused))) {
 	struct ndmsg *r = NLMSG_DATA(n);
 	int len = n->nlmsg_len;
 	struct rtattr *ifattr[IFLA_MAX+1];
@@ -153,6 +147,7 @@ typedef enum {
 	C_LIST,
 	C_ADD,
 	C_SET,
+	C_VER,
 	P_LOCAL,
 	P_REMOTE,
 	P_TUNNELID,
@@ -174,6 +169,9 @@ static s_cmd cmds[] = {
 	{ .cmd = "new", .cid = C_ADD, },
 	{ .cmd = "set", .cid = C_SET, },
 	{ .cmd = "change", .cid = C_SET, },
+	{ .cmd = "version", .cid = C_VER, },
+	{ .cmd = "--version", .cid = C_VER, },
+	{ .cmd = "-v", .cid = C_VER, },
 	{ .cmd = NULL, .cid = 0, },
 };
 
@@ -218,12 +216,17 @@ static e_cmd find_cmd(s_cmd *l, char *pcmd) {
 	return cnt ? E_AMBIGUOUS : E_NONE;
 }
 
+static void version(void) {
+	printf("eoip version %s\n",VERSION);
+}
+
 static void usage(char *me) {
 	printf("usage:\n"
 		"\t%s add [name <name>] tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>]\n"
 		"\t%s set  name <name>  tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>]\n"
-		"\t%s list\n",
-		me,me,me);
+		"\t%s list\n"
+		"\t%s version\n"
+		,me,me,me,me);
 }
 
 int main(int argc,char **argv) {
@@ -236,6 +239,9 @@ int main(int argc,char **argv) {
 			default:
 				usage(argv[0]);
 				return 0;
+			case C_VER:
+				version();
+				return 0;
 			case C_LIST:
 				if (argc > 2)
 					goto dafeutl;
@@ -243,6 +249,7 @@ int main(int argc,char **argv) {
 				return 0;
 			case C_SET:
 				excl = 0;
+				// fall through
 			case C_ADD: {
 				char ifname[IFNAMSIZ + 1] = "";
 				uint32_t sip = htonl(0), dip = htonl(0);
@@ -317,7 +324,7 @@ int main(int argc,char **argv) {
 					i += 2;
 				}
 				if (tid > 0xffff) {
-					if (tid == ~0)
+					if (tid == ~0U)
 						printf("tunnel-id is mandatory parameter\n");
 					else
 						printf("invalid tunnel-id value: %d\n",tid);
