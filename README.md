@@ -3,11 +3,11 @@ EOIP
 
 Kernel mode EOIP (Ethernet Over IP) tunnel compatible with MikroTik RouterOS
 
-There are several projects doing the same job with userland utilities via tap interfaces and raw sockets. While a userland application is easier to install and maintain it lacks the perfomance and stability of an in-kernel module. Especially for the simple job of adding and stripping the EOIP tunneling headers. The userland tunneling application may be good for testing, research or concept proof projects but not suitable for production environments with high bandwidth requirements.
+There are several projects doing the same job with userland utilities via tap interfaces and raw sockets. While a userland application is easier to install and maintain it lacks the performance and stability of an in-kernel module. Especially for the simple job of adding and stripping the EOIP tunneling headers. The userland tunneling application may be good for testing, research or concept proof projects but not suitable for production environments with high bandwidth requirements.
 
 This project's goals are:
 
-- to solve the perfomance issue with EOIP on Linux
+- to solve the performance issue with EOIP on Linux
 - to make EOIP tunneling support a standard part of the Linux world
 
 
@@ -83,7 +83,7 @@ make[1]: Entering directory '/usr/src/linux-headers-4.15.0-106-generic'
 make[1]: Leaving directory '/usr/src/linux-headers-4.15.0-106-generic'
 root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./gre.ko
 root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./eoip.ko 
-root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ../eoip add name eoip0 local local 203.0.113.113 remote 198.51.100.100 tunnel-id 8421
+root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ../eoip add name eoip0 local 203.0.113.113 remote 198.51.100.100 tunnel-id 8421
 root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ip li set eoip0 up
 ```
 
@@ -94,7 +94,7 @@ Userland management utility
 
 ##### Important notes:
 
-- Normally EoIP tunnels in MikroTiks work well by only specifying the remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have the local IP address configured and equal the the remote IP address configured on the other end.
+- Normally EoIP tunnels in MikroTiks work well by only specifying the remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have the local IP address configured and equal to the remote IP address configured on the other end.
 
 - This code does not support the keepalive option; configure the tunnel on MikroTik's end with `!keepalive`.
 
