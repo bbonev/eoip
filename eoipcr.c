@@ -148,6 +148,7 @@ typedef enum {
 	C_ADD,
 	C_SET,
 	C_VER,
+	C_HELP,
 	P_LOCAL,
 	P_REMOTE,
 	P_TUNNELID,
@@ -172,6 +173,9 @@ static s_cmd cmds[] = {
 	{ .cmd = "version", .cid = C_VER, },
 	{ .cmd = "--version", .cid = C_VER, },
 	{ .cmd = "-v", .cid = C_VER, },
+	{ .cmd = "help", .cid = C_HELP, },
+	{ .cmd = "--help", .cid = C_HELP, },
+	{ .cmd = "-h", .cid = C_HELP, },
 	{ .cmd = NULL, .cid = 0, },
 };
 
@@ -237,6 +241,7 @@ int main(int argc,char **argv) {
 		switch (c) {
 			dafeutl:
 			default:
+			case C_HELP:
 				usage(argv[0]);
 				return 0;
 			case C_VER:
