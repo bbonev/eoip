@@ -1,0 +1,11 @@
+*o.cmd
+*d
+Module.symvers
+modules.order
+*.orig
+eoip.c
+*.ko
+gre_demux.c
+*.mod.c
+gre.c
+gre.h
