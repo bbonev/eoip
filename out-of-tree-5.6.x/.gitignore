@@ -9,3 +9,4 @@ gre_demux.c
 *.mod.c
 gre.c
 gre.h
+built-in.a
