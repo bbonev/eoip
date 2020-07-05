@@ -221,7 +221,7 @@ static e_cmd find_cmd(s_cmd *l, char *pcmd) {
 }
 
 static void version(void) {
-	printf("eoip version %s\n",VERSION);
+	printf("eoip version %s\n",EOIP_VERSION);
 }
 
 static void usage(char *me) {
