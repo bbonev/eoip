@@ -17,10 +17,7 @@ int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsg
 	struct rtattr *ifgreo[IFLA_GRE_MAX+1];
 	const char *ifname;
 	const char *kind;
-	int link=0;
-	int tunid=0;
 	struct in_addr sip,dip;
-	uint8_t ttl=0,tos=0;
 	struct ifinfomsg *ifi;
 
 	sip.s_addr=dip.s_addr=htonl(0);
@@ -52,6 +49,9 @@ int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsg
 		kind="";
 	if (!strcmp(kind,"eoip") && ifinfo[IFLA_INFO_DATA]) {
 		char ts[IFNAMSIZ],td[IFNAMSIZ];
+		uint8_t ttl=0,tos=0;
+		int tunid=0;
+		int link=0;
 
 		parse_rtattr(ifgreo, IFLA_GRE_MAX, (void *)rta_getattr_str(ifinfo[IFLA_INFO_DATA]), ifinfo[IFLA_INFO_DATA]->rta_len);
 		if (ifgreo[IFLA_GRE_LINK])
@@ -332,7 +332,7 @@ int main(int argc,char **argv) {
 					if (tid == ~0U)
 						printf("tunnel-id is mandatory parameter\n");
 					else
-						printf("invalid tunnel-id value: %d\n",tid);
+						printf("invalid tunnel-id value: %u\n",tid);
 					return 0;
 				}
 				// tunnel id is in host byte order, addresses are in net byte order

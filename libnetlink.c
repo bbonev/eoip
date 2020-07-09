@@ -227,12 +227,13 @@ int rtnl_dump_filter_l(struct rtnl_handle *rth,
 					break; /* process next filter */
 				}
 				if (h->nlmsg_type == NLMSG_ERROR) {
-					struct nlmsgerr *err = (struct nlmsgerr*)NLMSG_DATA(h);
+					struct nlmsgerr *lerr = (struct nlmsgerr*)NLMSG_DATA(h);
+
 					if (h->nlmsg_len < NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
 						fprintf(stderr,
 							"ERROR truncated\n");
 					} else {
-						errno = -err->error;
+						errno = -lerr->error;
 						perror("RTNETLINK answers");
 					}
 					return -1;
@@ -393,7 +394,6 @@ int rtnl_listen(struct rtnl_handle *rtnl,
 		rtnl_filter_t handler,
 		void *jarg)
 {
-	int status;
 	struct nlmsghdr *h;
 	struct sockaddr_nl nladdr;
 	struct iovec iov;
@@ -412,6 +412,8 @@ int rtnl_listen(struct rtnl_handle *rtnl,
 
 	iov.iov_base = buf;
 	while (1) {
+		int status;
+
 		iov.iov_len = sizeof(buf);
 		status = recvmsg(rtnl->fd, &msg, 0);
 
@@ -467,7 +469,6 @@ int rtnl_listen(struct rtnl_handle *rtnl,
 int rtnl_from_file(FILE *rtnl, rtnl_filter_t handler,
 		   void *jarg)
 {
-	int status;
 	struct sockaddr_nl nladdr;
 	char   buf[8192];
 	struct nlmsghdr *h = (void*)buf;
@@ -479,6 +480,7 @@ int rtnl_from_file(FILE *rtnl, rtnl_filter_t handler,
 
 	while (1) {
 		int err, len;
+		int status;
 		int l;
 
 		status = fread(&buf, 1, sizeof(*h), rtnl);
@@ -496,7 +498,7 @@ int rtnl_from_file(FILE *rtnl, rtnl_filter_t handler,
 		l = len - sizeof(*h);
 
 		if (l<0 || len>(ssize_t)sizeof(buf)) {
-			fprintf(stderr, "!!!malformed message: len=%d @%lu\n",
+			fprintf(stderr, "!!!malformed message: len=%d @%ld\n",
 				len, ftell(rtnl));
 			return -1;
 		}
