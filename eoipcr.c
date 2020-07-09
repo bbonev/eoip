@@ -304,7 +304,7 @@ int main(int argc,char **argv) {
 							if (!link)
 								link=atoi(argv[i + 1]);
 							if (!link) {
-								printf("invald interface name/index: %s\n", argv[i + 1]);
+								printf("invalid interface name/index: %s\n", argv[i + 1]);
 								return 0;
 							}
 							break;
@@ -313,14 +313,14 @@ int main(int argc,char **argv) {
 							break;
 						case P_LOCAL:
 							if (!inet_aton(argv[i + 1], &iad)) {
-								printf("invald ip address: %s\n", argv[i + 1]);
+								printf("invalid ip address: %s\n", argv[i + 1]);
 								return 0;
 							}
 							sip = iad.s_addr;
 							break;
 						case P_REMOTE:
 							if (!inet_aton(argv[i + 1], &iad)) {
-								printf("invald ip address: %s\n", argv[i + 1]);
+								printf("invalid ip address: %s\n", argv[i + 1]);
 								return 0;
 							}
 							dip = iad.s_addr;
