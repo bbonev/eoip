@@ -558,12 +558,11 @@ int addattr_l(struct nlmsghdr *n, int maxlen, int type, const void *data,
 		fprintf(stderr, "addattr_l ERROR: message exceeded bound of %d\n",maxlen);
 		return -1;
 	}
-	if (!data)
-		return -1;
 	rta = NLMSG_TAIL(n);
 	rta->rta_type = type;
 	rta->rta_len = len;
-	memcpy(RTA_DATA(rta), data, alen);
+	if (data)
+		memcpy(RTA_DATA(rta), data, alen);
 	n->nlmsg_len = NLMSG_ALIGN(n->nlmsg_len) + RTA_ALIGN(len);
 	return 0;
 }
