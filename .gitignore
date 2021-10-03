@@ -1,2 +1,14 @@
 *.o
 eoip
+out-of-tree-*/*o.cmd
+out-of-tree-*/*d
+out-of-tree-*/Module.symvers
+out-of-tree-*/modules.order
+out-of-tree-*/*.orig
+out-of-tree-*/eoip.c
+out-of-tree-*/*.ko
+out-of-tree-*/gre_demux.c
+out-of-tree-*/*.mod.c
+out-of-tree-*/gre.c
+out-of-tree-*/gre.h
+out-of-tree-*/built-in.a
