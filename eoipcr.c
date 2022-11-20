@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <linux/ip.h>
 #include <linux/if_tunnel.h>
 
 #include "version.h"
