@@ -10,7 +10,6 @@ This project's goals are:
 -   to solve the performance issue with EOIP on Linux
 -   to make EOIP tunneling support a standard part of the Linux world
 
-
 Install
 -------
 
@@ -18,12 +17,12 @@ This code was developed on a 3.2.44 linux kernel and tested on the next 3.2.x re
 
 -   To patch a kernel tree:
 
-```shell
+````shell
 cd path-to-kernel-source/linux-X.Y.Z
 patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip-gre-demux.patch
 patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip-buildconf.patch
 patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip.patch
-```
+````
 
 afterwards configure the kernel in the usual ways `make (menu/x/...)config` and do not forget to select `IP: EOIP tunnels over IP` located under `Networking options` from `Networking support`
 
@@ -33,11 +32,11 @@ Unless the target is a limited embedded system, it is recommended to build EOIP 
 
 -   To build the modules out of the kernel tree:
 
-```shell
+````shell
 cd path-to-eoip/out-of-tree-X.Y.Z
 make
 make install
-```
+````
 
 For this to work at least the running kernel's headers should be available.
 
@@ -48,16 +47,16 @@ The `eoip.ko` module cannot operate properly without the newly built version of 
 
 -   To build the userland management utility `eoip`:
 
-```shell
+````shell
 cd path-to-eoip
 make
-```
+````
 
 ### Example how to build out of tree
 
 This example may be used as a checklist for an out of tree build:
 
-```shell
+````shell
 root@ubuntu-18_04:~/eoip# make
 cc -Wall -Os -c libnetlink.c
 cc -Wall -Os -o eoip eoipcr.c libnetlink.o
@@ -86,7 +85,7 @@ root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./gre.ko
 root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./eoip.ko
 root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ../eoip add name eoip0 local 203.0.113.113 remote 198.51.100.100 tunnel-id 8421
 root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ip li set eoip0 up
-```
+````
 
 Userland management utility
 ---------------------------
@@ -105,25 +104,25 @@ Userland management utility
 
 -   to create new eoip tunnel interface:
 
-```
+````none
     eoip add tunnel-id <tunnel-id> [name <if-name>]
              [local <src-address>] [remote <dst-address>]
              [link <ifindex>] [ttl <ttl>] [tos <tos>]
-```
+````
 
 -   to change existing eoip tunnel interface:
 
-```
+````none
     eoip change name <if-name> tunnel-id <tunnel-id>
                 [local <src-address>] [remote <dst-address>]
                 [link <ifindex>] [ttl <ttl>] [tos <tos>]
-```
+````
 
 -   to list existing eoip tunnels:
 
-```
+````none
     eoip list
-```
+````
 
 ### Example how to configure
 
@@ -165,7 +164,7 @@ Note that RFC 1701 is mentioned in MikroTik's docs but there is nothing in commo
 
 Header format (taken from https://github.com/katuma/eoip):
 
-````
+````none
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
