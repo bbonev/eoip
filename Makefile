@@ -6,10 +6,10 @@
 TARGET=eoip
 
 ifndef NO_FLTO
-CFLAGS?=-O3 -fno-stack-protector -mno-stackrealign -flto
-LDFLAGS+=-O3 -fno-stack-protector -mno-stackrealign -flto
+CFLAGS?=-O3 -fno-stack-protector -flto
+LDFLAGS+=-O3 -fno-stack-protector -flto
 else
-CFLAGS?=-O3 -fno-stack-protector -mno-stackrealign
+CFLAGS?=-O3 -fno-stack-protector
 endif
 
 STRIP?=strip
