@@ -87,6 +87,16 @@ root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ../eoip add name eoip0 local 203.0.
 root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ip li set eoip0 up
 ````
 
+### DKMS
+
+````shell
+cd path-to-eoip
+ln -s $(pwd) /usr/src/eoip-1.1
+dkms add eoip/1.1
+dkms build eoip/1.1
+dkms install eoip/1.1
+````
+
 Userland management utility
 ---------------------------
 
