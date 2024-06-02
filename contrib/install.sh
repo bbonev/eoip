@@ -1,10 +1,14 @@
-#!/bin/bash -e
+#!/bin/bash
+
+# exit on error
+set -e
 
 # Change dir to the script's location
 cd "$(dirname "$0")"
 
 # Check for a loaded gre module
-loaded=$(lsmod | grep '^gre ')
+# note the cat that succeeds even if grep fails; there is set -e on top
+loaded=$(lsmod | grep '^gre ' | cat)
 if [[ "$loaded" != "" ]]; then
 	# Show a hint of loaded modules
 	lsmod | grep '^gre ' | cat
@@ -44,11 +48,12 @@ make install
 depmod
 
 # Show a hint of loaded modules
-lsmod | grep '^gre '
+# note the cat that succeeds even if grep fails; there is set -e on top
+lsmod | grep '^gre ' | cat
 
 # Remove the old module
 echo "Attempting to remove the gre module... if this fails, you may have a dependant module that needs to be unloaded first"
-rmmod gre
+rmmod gre || true
 
 # Load the new module
 modprobe eoip
