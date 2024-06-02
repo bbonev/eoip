@@ -146,6 +146,12 @@ On Linux:
 
 `eoip add name eoip1234 local 203.0.113.50 remote 198.51.100.11 tunnel-id 1234`
 
+Installation Script
+-------
+
+Example provided in contrib/install.sh
+
+
 Roadmap
 -------
 
