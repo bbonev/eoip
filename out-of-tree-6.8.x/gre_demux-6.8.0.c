@@ -1,1 +1,1 @@
-out-of-tree-6.1.x/gre_demux-6.1.0.c
+../out-of-tree-6.1.x/gre_demux-6.1.0.c
