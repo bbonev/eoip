@@ -1,6 +1,6 @@
 --- /dev/null	2025-02-19 21:54:39.510071871 +0200
 +++ linux-6.12.16/net/ipv4/eoip.c	2025-02-26 01:13:06.039347027 +0200
-@@ -0,0 +1,914 @@
+@@ -0,0 +1,916 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
@@ -210,6 +210,7 @@
 +
 +	dev->mtu = eoip_tunnel_bind_dev(dev);
 +
++	dev->max_mtu = ETH_MAX_MTU;
 +	if (register_netdevice(dev) < 0)
 +		goto failed_free;
 +
@@ -758,6 +759,7 @@
 +	/* Can use a lockless transmit, we do not generate output sequences */
 +	dev->lltx = true;
 +
++	dev->max_mtu = ETH_MAX_MTU;
 +	err = register_netdevice(dev);
 +	if (err)
 +		goto out;
