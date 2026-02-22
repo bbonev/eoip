@@ -1,6 +1,6 @@
 --- /dev/null	2026-02-19 18:09:05.813016362 +0000
 +++ linux-6.18.12/net/ipv4/eoip.c	2026-02-22 15:44:24.292929177 +0000
-@@ -0,0 +1,934 @@
+@@ -0,0 +1,932 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
@@ -210,7 +210,6 @@
 +
 +	dev->mtu = eoip_tunnel_bind_dev(dev);
 +
-+	dev->min_mtu = ETH_MIN_MTU;
 +	dev->max_mtu = ETH_MAX_MTU;
 +	if (register_netdevice(dev) < 0)
 +		goto failed_free;
@@ -620,8 +619,6 @@
 +		t = rtnl_dereference(ign->tunnels[h]);
 +
 +		while (t != NULL) {
-+			t->dev->min_mtu = ETH_MIN_MTU;
-+			t->dev->max_mtu = ETH_MAX_MTU;
 +			unregister_netdevice_queue(t->dev, head);
 +			t = rtnl_dereference(t->next);
 +		}
@@ -778,6 +775,7 @@
 +	/* Can use a lockless transmit, we do not generate output sequences */
 +	dev->lltx = true;
 +
++	dev->max_mtu = ETH_MAX_MTU;
 +	err = register_netdevice(dev);
 +	if (err)
 +		goto out;
