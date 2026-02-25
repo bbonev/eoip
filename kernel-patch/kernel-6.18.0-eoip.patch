@@ -743,7 +743,6 @@
 +	dev->priv_destructor = eoip_dev_free;
 +
 +	dev->ifindex = 0;
-+	dev->features |= NETIF_F_VLAN_CHALLENGED;
 +	dev->priv_flags |= IFF_NO_ADDRCONF;
 +}
 +
