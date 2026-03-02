@@ -1,6 +1,6 @@
---- /dev/null	2026-02-19 18:09:05.813016362 +0000
-+++ linux-6.18.12/net/ipv4/eoip.c	2026-02-22 15:44:24.292929177 +0000
-@@ -0,0 +1,932 @@
+--- linux-6.18.12/net/ipv4/eoip.c
++++ linux-6.18.12/net/ipv4/eoip.c
+@@ -0,0 +1,931 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
@@ -743,7 +743,6 @@
 +	dev->priv_destructor = eoip_dev_free;
 +
 +	dev->ifindex = 0;
-+	dev->features |= NETIF_F_VLAN_CHALLENGED;
 +	dev->priv_flags |= IFF_NO_ADDRCONF;
 +}
 +
