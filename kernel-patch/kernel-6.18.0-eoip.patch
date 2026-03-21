@@ -1,6 +1,6 @@
 --- linux-6.18.12/net/ipv4/eoip.c
 +++ linux-6.18.12/net/ipv4/eoip.c
-@@ -0,0 +1,931 @@
+@@ -0,0 +1,930 @@
 +/*
 + *	Linux NET3:	EOIP over IP protocol decoder.
 + *
@@ -743,7 +743,6 @@
 +	dev->priv_destructor = eoip_dev_free;
 +
 +	dev->ifindex = 0;
-+	dev->priv_flags |= IFF_NO_ADDRCONF;
 +}
 +
 +static int eoip_newlink(struct net_device *dev, struct rtnl_newlink_params *p, struct netlink_ext_ack *extack)
