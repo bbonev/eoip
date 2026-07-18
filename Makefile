@@ -36,7 +36,7 @@ libnetlink.o: libnetlink.c libnetlink.h
 	$(E) CC $@
 	$(Q)$(CC) $(MYCFLAGS) -c -o $@ $<
 
-eoipcr.o: eoipcr.c libnetlink.h version.h
+eoipcr.o: eoipcr.c libnetlink.h eoip_version.h unified/eoip_gre.h
 	$(E) CC $@
 	$(Q)$(CC) $(MYCFLAGS) -c -o $@ $<
 
@@ -58,11 +58,13 @@ clean:
 modules:
 	$(MAKE) -C unified $(if $(KDIR),KDIR=$(KDIR))
 	cp unified/eoip.ko unified/gre.ko .
+	test ! -f unified/eoipv6.ko || cp unified/eoipv6.ko .
 
 mclean:
 	$(MAKE) -C unified clean $(if $(KDIR),KDIR=$(KDIR))
 	rm -f eoip.ko
 	rm -f gre.ko
+	rm -f eoipv6.ko
 
 minstall:
 	$(MAKE) -C unified modules_install $(if $(KDIR),KDIR=$(KDIR))
