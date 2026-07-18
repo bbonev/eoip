@@ -320,8 +320,8 @@ static void version(void) {
 
 static void usage(char *me) {
 	printf("usage:\n"
-		"\t%s add [name <name>] tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>] [keepalive <secs>[,<retries>]|keepalive none]\n"
-		"\t%s set  name <name>  tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>] [keepalive <secs>[,<retries>]|keepalive none]\n"
+		"\t%s add [name <name>] tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>] [keepalive none|<secs>[,<retries>]]\n"
+		"\t%s set  name <name>  tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>] [keepalive none|<secs>[,<retries>]]\n"
 		"\t%s list\n"
 		"\t%s version\n"
 		"notes:\n"
