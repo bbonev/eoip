@@ -37,10 +37,8 @@ make clean
 make
 make install
 
-# Detect Kernel Major & Minor
-unamer=$(uname -r)
-kernel=(${unamer//./ })
-cd "out-of-tree-${kernel[0]}.${kernel[1]}.x"
+# The unified source builds on any supported kernel
+cd unified
 
 # Build eoip module
 make

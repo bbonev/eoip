@@ -12,12 +12,6 @@ else
 CFLAGS?=-O3 -fno-stack-protector
 endif
 
-KVER = $(shell uname -r)
-KMAJ = $(shell echo $(KVER) | \
-sed -e 's/^\([0-9][0-9]*\)\.[0-9][0-9]*\.[0-9][0-9]*.*/\1/')
-KMIN = $(shell echo $(KVER) | \
-sed -e 's/^[0-9][0-9]*\.\([0-9][0-9]*\)\.[0-9][0-9]*.*/\1/')
-
 STRIP?=strip
 PREFIX?=$(DESTDIR)/
 
@@ -59,19 +53,16 @@ uninstall:
 clean:
 	rm -f eoip eoipcr.o libnetlink.o
 
-modules: gre.ko eoip.ko
-
-eoip.ko: gre.ko
-	cp out-of-tree-$(KMAJ).$(KMIN).x/eoip.ko .
-
-gre.ko:
-	$(MAKE) -C out-of-tree-$(KMAJ).$(KMIN).x
-	cp out-of-tree-$(KMAJ).$(KMIN).x/gre.ko .
+# the unified source builds on any supported kernel (3.2 .. 7.0+);
+# override KDIR to build for a kernel other than the running one
+modules:
+	$(MAKE) -C unified $(if $(KDIR),KDIR=$(KDIR))
+	cp unified/eoip.ko unified/gre.ko .
 
 mclean:
-	cd out-of-tree-$(KMAJ).$(KMIN).x && make clean
+	$(MAKE) -C unified clean $(if $(KDIR),KDIR=$(KDIR))
 	rm -f eoip.ko
 	rm -f gre.ko
 
 minstall:
-	$(MAKE) -C out-of-tree-$(KMAJ).$(KMIN).x modules_install
+	$(MAKE) -C unified modules_install $(if $(KDIR),KDIR=$(KDIR))
