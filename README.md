@@ -17,7 +17,9 @@ This code was originally developed on a 3.2.44 linux kernel; a single unified so
 
 ### Unified out-of-tree build (recommended)
 
-The `unified/` directory contains a single set of sources (`eoip.c`, `eoipv6.c`) that builds unmodified on all supported kernels (3.2 up to 7.0+) using `LINUX_VERSION_CODE` conditionals. No patching happens at build time and every kernel version gets the same features at the same time. Both modules are fully standalone: they do not replace the in-tree `gre` module. `eoip.ko` intercepts its protocol-47 packets with a netfilter hook so standard GRE and PPTP keep working; `eoipv6.ko` uses IPv6 protocol 97 which has no in-tree handler. `eoipv6.ko` is built automatically when the kernel has IPv6 support:
+The `unified/` directory contains a single set of sources (`eoip.c`, `eoipv6.c`) that builds unmodified on all supported kernels (3.2 up to 7.0+) using `LINUX_VERSION_CODE` conditionals. No patching happens at build time and every kernel version gets the same features at the same time.
+
+Both modules are fully standalone: they do not replace the in-tree `gre` module. `eoip.ko` intercepts its protocol-47 packets with a netfilter hook so standard GRE and PPTP keep working; `eoipv6.ko` uses IPv6 protocol 97 which has no in-tree handler. `eoipv6.ko` is built automatically when the kernel has IPv6 support:
 
 ````shell
 cd path-to-eoip/unified
