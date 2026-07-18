@@ -15,13 +15,26 @@ Install
 
 This code was developed on a 3.2.44 linux kernel and tested on the next 3.2.x releases. Patches and out-of-tree builds are provided for 3.2/3.16/4.19 kernels. It should not be hard to adapt it to different Linux kernels.
 
+### Unified out-of-tree build (recommended)
+
+The `unified/` directory contains a single set of sources (`eoip.c`, `gre.c`) that builds unmodified on all supported kernels (3.2 up to 7.0+) using `LINUX_VERSION_CODE` conditionals. No patching happens at build time and every kernel version gets the same features at the same time:
+
+````shell
+cd path-to-eoip/unified
+make               # build against the running kernel
+make KDIR=/lib/modules/X.Y.Z/build   # or against specific headers
+make install
+````
+
+The per-version `out-of-tree-X.Y.x` directories and `kernel-patch/` patches are retained for reference under `obsolete/`, but the unified build is preferred.
+
 -   To patch a kernel tree:
 
 ````shell
 cd path-to-kernel-source/linux-X.Y.Z
-patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip-gre-demux.patch
-patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip-buildconf.patch
-patch -p1 < path-to-eoip/kernel-patch/kernel-X.Y.Z-eoip.patch
+patch -p1 < path-to-eoip/obsolete/kernel-patch/kernel-X.Y.Z-eoip-gre-demux.patch
+patch -p1 < path-to-eoip/obsolete/kernel-patch/kernel-X.Y.Z-eoip-buildconf.patch
+patch -p1 < path-to-eoip/obsolete/kernel-patch/kernel-X.Y.Z-eoip.patch
 ````
 
 afterwards configure the kernel in the usual ways `make (menu/x/...)config` and do not forget to select `IP: EOIP tunnels over IP` located under `Networking options` from `Networking support`
@@ -30,10 +43,10 @@ EOIP tunnel depends on `IP: GRE demultiplexer` - if it not selected then EOIP tu
 
 Unless the target is a limited embedded system, it is recommended to build EOIP and GRE demux as modules.
 
--   To build the modules out of the kernel tree:
+-   To build the modules out of the kernel tree (legacy per-version way):
 
 ````shell
-cd path-to-eoip/out-of-tree-X.Y.Z
+cd path-to-eoip/obsolete/out-of-tree-X.Y.Z
 make
 make install
 ````
