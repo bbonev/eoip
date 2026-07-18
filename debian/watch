@@ -1,4 +1,8 @@
-version=4
-opts=filenamemangle=s%(?:.*?)?v?(\d[\d.]*)\.tar\.gz%eoip-$1.tar.gz% \
-  https://github.com/bbonev/eoip/tags \
-  (?:.*?/)?v?(\d[\d.]*)\.tar\.gz debian uupdate
+Version: 5
+
+Template: GitHub
+Dist: https://github.com/bbonev/eoip
+DownloadURLMangle: s%(api.github.com/repos/[^/]+/[^/]+)/git/refs/tags/v(@ANY_VERSION@)%github.com/bbonev/eoip/releases/download/v$2/eoip-$2.tar.xz%g
+FilenameMangle: s%.*?v?(\d[\d.]*)$%eoip-$1.tar.xz%
+PgpSigURLMangle: s/$/.asc/
+Update-Script: uupdate
