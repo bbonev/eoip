@@ -66,7 +66,9 @@
 #include <net/inet_dscp.h>
 #endif
 
+#include "../eoip_version.h"
 #include "eoip_gre.h"
+#include "eoip_keepalive.h"
 
 /*
  * Backward compatibility shims.  Everything below the shims is written
@@ -136,6 +138,7 @@ struct eoip_tunnel {
 	unsigned long		err_time;	/* time of last ICMP error */
 	int			err_count;	/* number of ICMP errors seen */
 	int			hlen;		/* outer iph + EoIP header */
+	struct eoip_keepalive	ka;
 };
 
 #define eoip_for_each_tunnel_rcu(t, start) \
@@ -344,8 +347,7 @@ static int eoip_rcv(struct sk_buff *skb)
 	unsigned int frame_len;
 	u32 key;
 
-	/* EoIP header followed by at least an ethernet header */
-	if (!pskb_may_pull(skb, EOIP_HDR_LEN + ETH_HLEN))
+	if (!pskb_may_pull(skb, EOIP_HDR_LEN))
 		goto drop_nolock;
 
 	iph = ip_hdr(skb);
@@ -361,6 +363,23 @@ static int eoip_rcv(struct sk_buff *skb)
 
 	tunnel = eoip_tunnel_lookup(skb->dev, iph->saddr, iph->daddr, key);
 	if (tunnel) {
+		if (frame_len == 0) {
+			/* MikroTik keepalive: refresh peer liveness,
+			 * never deliver it as a frame
+			 */
+			eoip_ka_recv(&tunnel->ka);
+			rcu_read_unlock();
+			consume_skb(skb);
+			return 0;
+		}
+
+		if (!pskb_may_pull(skb, EOIP_HDR_LEN + ETH_HLEN)) {
+			DEV_STATS_INC(tunnel->dev, rx_length_errors);
+			DEV_STATS_INC(tunnel->dev, rx_errors);
+			goto drop;
+		}
+		h = skb->data;	/* pskb_may_pull may reallocate the head */
+
 		secpath_reset(skb);
 
 		pskb_pull(skb, EOIP_HDR_LEN);
@@ -383,8 +402,15 @@ static int eoip_rcv(struct sk_buff *skb)
 			goto drop;
 		}
 
-		/* trim padding beyond the advertised frame length */
-		if (frame_len >= ETH_HLEN && skb->len > frame_len)
+		/* the advertised frame length is authoritative: drop
+		 * truncated or absurd frames, trim padding beyond it
+		 */
+		if (frame_len < ETH_HLEN || skb->len < frame_len) {
+			DEV_STATS_INC(tunnel->dev, rx_length_errors);
+			DEV_STATS_INC(tunnel->dev, rx_errors);
+			goto drop;
+		}
+		if (skb->len > frame_len)
 			pskb_trim_rcsum(skb, frame_len);
 
 		skb->protocol = eth_type_trans(skb, tunnel->dev);
@@ -433,9 +459,17 @@ static void eoip_tx_stats(struct net_device *dev, int pkt_len)
 #endif
 }
 
-static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
+/* Route to the peer, prepend the outer IP + EoIP header (frame_size is
+ * the value of the EoIP length field: the encapsulated frame length for
+ * data, 0 for a keepalive) and hand the skb to ip_local_out().
+ * Consumes the skb.  Error counters are always accounted; the tx byte
+ * and packet counters only for data - keepalives are tunnel overhead,
+ * not interface traffic.
+ */
+static void eoip_xmit_skb(struct eoip_tunnel *tunnel, struct sk_buff *skb,
+			u16 frame_size)
 {
-	struct eoip_tunnel *tunnel = netdev_priv(dev);
+	struct net_device *dev = tunnel->dev;
 	const struct iphdr *tiph = &tunnel->parms.iph;
 	struct flowi4 fl4;
 	struct rtable *rt;			/* Route to the other host */
@@ -445,7 +479,6 @@ static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
 	int hlen = tunnel->hlen;
 	int err;
 	int pkt_len;
-	uint16_t frame_size = skb->len;
 
 	IPCB(skb)->flags = 0;
 
@@ -474,16 +507,6 @@ static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto tx_error;
 	}
 
-	if (tunnel->err_count > 0) {
-		if (time_before(jiffies,
-				tunnel->err_time + IPTUNNEL_ERR_TIMEO)) {
-			tunnel->err_count--;
-
-			dst_link_failure(skb);
-		} else
-			tunnel->err_count = 0;
-	}
-
 	max_headroom = LL_RESERVED_SPACE(tdev) + hlen + rt->dst.header_len;
 
 	if (skb_headroom(skb) < max_headroom || skb_shared(skb) ||
@@ -495,7 +518,7 @@ static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
 			ip_rt_put(rt);
 			DEV_STATS_INC(dev, tx_dropped);
 			dev_kfree_skb(skb);
-			return NETDEV_TX_OK;
+			return;
 		}
 		if (skb->sk)
 			skb_set_owner_w(new_skb, skb->sk);
@@ -558,17 +581,72 @@ static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
 #else
 	err = ip_local_out(skb);
 #endif
-	if (likely(net_xmit_eval(err) == 0))
-		eoip_tx_stats(dev, pkt_len);
-	else
+	if (likely(net_xmit_eval(err) == 0)) {
+		if (frame_size)
+			eoip_tx_stats(dev, pkt_len);
+	} else if (frame_size)
 		eoip_tx_stats(dev, -1);
 
-	return NETDEV_TX_OK;
+	return;
 
 tx_error:
 	DEV_STATS_INC(dev, tx_errors);
 	dev_kfree_skb(skb);
+}
+
+static netdev_tx_t eoip_if_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	struct eoip_tunnel *tunnel = netdev_priv(dev);
+	uint16_t frame_size = skb->len;
+
+	if (tunnel->err_count > 0) {
+		if (time_before(jiffies,
+				tunnel->err_time + IPTUNNEL_ERR_TIMEO)) {
+			tunnel->err_count--;
+
+			dst_link_failure(skb);
+		} else
+			tunnel->err_count = 0;
+	}
+
+	eoip_xmit_skb(tunnel, skb, frame_size);
+
 	return NETDEV_TX_OK;
+}
+
+static void eoip_ka_send(struct net_device *dev)
+{
+	struct eoip_tunnel *tunnel = netdev_priv(dev);
+	struct sk_buff *skb;
+	unsigned int room = LL_MAX_HEADER + sizeof(struct iphdr) + EOIP_HDR_LEN;
+
+	if (!tunnel->parms.iph.daddr)
+		return;
+
+	skb = alloc_skb(room, GFP_ATOMIC);
+	if (!skb)
+		return;
+	skb_reserve(skb, room);
+	skb->dev = dev;
+	skb->protocol = htons(ETH_P_IP);
+
+	eoip_xmit_skb(tunnel, skb, 0);
+}
+
+static int eoip_if_open(struct net_device *dev)
+{
+	struct eoip_tunnel *tunnel = netdev_priv(dev);
+
+	eoip_ka_open(&tunnel->ka);
+	return 0;
+}
+
+static int eoip_if_close(struct net_device *dev)
+{
+	struct eoip_tunnel *tunnel = netdev_priv(dev);
+
+	eoip_ka_stop(&tunnel->ka);
+	return 0;
 }
 
 static int eoip_tunnel_bind_dev(struct net_device *dev)
@@ -724,6 +802,10 @@ static int __eoip_validate(struct nlattr *tb[], struct nlattr *data[])
 			return -EINVAL;
 	}
 
+	if (data[IFLA_EOIP_KA_INTERVAL] &&
+			nla_get_u32(data[IFLA_EOIP_KA_INTERVAL]) > EOIP_KA_MAX_INTERVAL)
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -764,6 +846,7 @@ static int eoip_if_init(struct net_device *dev)
 	strscpy(tunnel->parms.name, dev->name, IFNAMSIZ);
 
 	eoip_tunnel_bind_dev(dev);
+	eoip_ka_init(&tunnel->ka, dev, eoip_ka_send);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 7, 0)
 	{
@@ -823,6 +906,8 @@ static struct net_device_stats *eoip_if_get_stats(struct net_device *dev)
 static const struct net_device_ops eoip_netdev_ops = {
 	.ndo_init = eoip_if_init,
 	.ndo_uninit = eoip_if_uninit,
+	.ndo_open = eoip_if_open,
+	.ndo_stop = eoip_if_close,
 	.ndo_start_xmit = eoip_if_xmit,
 	.ndo_set_mac_address = eth_mac_addr,
 	.ndo_validate_addr = eth_validate_addr,
@@ -895,6 +980,12 @@ static int __eoip_newlink(struct net_device *dev,
 
 	eoip_netlink_parms(data, &nt->parms);
 
+	/* keepalive is off unless requested (RouterOS defaults to 10s,10) */
+	if (data && data[IFLA_EOIP_KA_INTERVAL])
+		nt->ka.interval = nla_get_u32(data[IFLA_EOIP_KA_INTERVAL]);
+	if (data && data[IFLA_EOIP_KA_RETRIES])
+		nt->ka.retries = nla_get_u8(data[IFLA_EOIP_KA_RETRIES]);
+
 	if (eoip_tunnel_find(net, &nt->parms, dev->type))
 		return -EEXIST;
 
@@ -958,6 +1049,19 @@ static int __eoip_changelink(struct net_device *dev,
 		t->parms.link = p.link;
 		eoip_tunnel_bind_dev(dev);
 		netdev_state_change(dev);
+	}
+
+	/* absent attributes leave the keepalive configuration unchanged so
+	 * that a set request from an older tool does not disable it
+	 */
+	if (data && (data[IFLA_EOIP_KA_INTERVAL] || data[IFLA_EOIP_KA_RETRIES])) {
+		u32 interval = data[IFLA_EOIP_KA_INTERVAL] ?
+			nla_get_u32(data[IFLA_EOIP_KA_INTERVAL]) : t->ka.interval;
+		u8 retries = data[IFLA_EOIP_KA_RETRIES] ?
+			nla_get_u8(data[IFLA_EOIP_KA_RETRIES]) : t->ka.retries;
+
+		if (interval != t->ka.interval || retries != t->ka.retries)
+			eoip_ka_config(&t->ka, interval, retries);
 	}
 
 	return 0;
@@ -1030,6 +1134,10 @@ static size_t eoip_get_size(const struct net_device *dev)
 		nla_total_size(1) +
 		/* IFLA_GRE_TOS */
 		nla_total_size(1) +
+		/* IFLA_EOIP_KA_INTERVAL */
+		nla_total_size(4) +
+		/* IFLA_EOIP_KA_RETRIES */
+		nla_total_size(1) +
 		0;
 }
 
@@ -1043,7 +1151,9 @@ static int eoip_fill_info(struct sk_buff *skb, const struct net_device *dev)
 		nla_put_be32(skb, IFLA_GRE_LOCAL, p->iph.saddr) ||
 		nla_put_be32(skb, IFLA_GRE_REMOTE, p->iph.daddr) ||
 		nla_put_u8(skb, IFLA_GRE_TTL, p->iph.ttl) ||
-		nla_put_u8(skb, IFLA_GRE_TOS, p->iph.tos))
+		nla_put_u8(skb, IFLA_GRE_TOS, p->iph.tos) ||
+		nla_put_u32(skb, IFLA_EOIP_KA_INTERVAL, t->ka.interval) ||
+		nla_put_u8(skb, IFLA_EOIP_KA_RETRIES, t->ka.retries))
 		goto nla_put_failure;
 
 	return 0;
@@ -1052,18 +1162,20 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static const struct nla_policy eoip_policy[IFLA_GRE_MAX + 1] = {
+static const struct nla_policy eoip_policy[IFLA_EOIP_ATTR_MAX + 1] = {
 	[IFLA_GRE_LINK]		= { .type = NLA_U32 },
 	[IFLA_GRE_IKEY]		= { .type = NLA_U32 },
 	[IFLA_GRE_LOCAL]	= { .len = 4 },
 	[IFLA_GRE_REMOTE]	= { .len = 4 },
 	[IFLA_GRE_TTL]		= { .type = NLA_U8 },
 	[IFLA_GRE_TOS]		= { .type = NLA_U8 },
+	[IFLA_EOIP_KA_INTERVAL]	= { .type = NLA_U32 },
+	[IFLA_EOIP_KA_RETRIES]	= { .type = NLA_U8 },
 };
 
 static struct rtnl_link_ops eoip_ops __read_mostly = {
 	.kind		= "eoip",
-	.maxtype	= IFLA_GRE_MAX,
+	.maxtype	= IFLA_EOIP_ATTR_MAX,
 	.policy		= eoip_policy,
 	.priv_size	= sizeof(struct eoip_tunnel),
 	.setup		= eoip_setup,
@@ -1082,7 +1194,7 @@ static int __init eoip_init(void)
 {
 	int err;
 
-	pr_info("EoIP (IPv4) tunneling driver\n");
+	pr_info("EoIP (IPv4) tunneling driver v" EOIP_VERSION "\n");
 
 	err = register_pernet_device(&eoip_net_ops);
 	if (err < 0)
@@ -1119,6 +1231,7 @@ static void __exit eoip_fini(void)
 module_init(eoip_init);
 module_exit(eoip_fini);
 MODULE_LICENSE("GPL");
+MODULE_VERSION(EOIP_VERSION);
 MODULE_DESCRIPTION("MikroTik compatible EoIP (Ethernet over IP) tunnel driver");
 MODULE_AUTHOR("Boian Bonev <bbonev@ipacct.com>");
 MODULE_ALIAS_RTNL_LINK("eoip");
