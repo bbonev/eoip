@@ -67,3 +67,18 @@ mclean:
 
 minstall:
 	$(MAKE) -C unified modules_install $(if $(KDIR),KDIR=$(KDIR))
+
+VER:=$(shell ./version.sh)
+mkotar:
+	$(MAKE) clean
+	-dh_clean
+	tar \
+		--xform 's,^[.],eoip-$(VER),' \
+		--exclude ./.git \
+		--exclude ./.gitignore \
+		--exclude ./debian \
+		-Jcvf ../eoip_$(VER).orig.tar.xz .
+	-rm -f ../eoip_$(VER).orig.tar.xz.asc
+	gpg -a --detach-sign ../eoip_$(VER).orig.tar.xz
+	cp -fa ../eoip_$(VER).orig.tar.xz ../eoip-$(VER).tar.xz
+	cp -fa ../eoip_$(VER).orig.tar.xz.asc ../eoip-$(VER).tar.xz.asc
