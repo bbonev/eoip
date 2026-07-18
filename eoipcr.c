@@ -8,15 +8,37 @@
 #include <linux/ip.h>
 #include <linux/if_tunnel.h>
 
-#include "version.h"
+#include "eoip_version.h"
 #include "libnetlink.h"
+#include "unified/eoip_gre.h"
+
+// nested attribute table size covering both the system IFLA_GRE_* range
+// and the private eoip attributes
+#define EOIP_PARSE_MAX (IFLA_GRE_MAX>IFLA_EOIP_ATTR_MAX?IFLA_GRE_MAX:IFLA_EOIP_ATTR_MAX)
+
+// keepalive suffix for the list output; empty against a kernel module
+// that predates the keepalive attributes
+static void ka_suffix(struct rtattr *ifgreo[],char *kbuf,size_t len) {
+	long kai=-1;
+	int kar=0;
+
+	kbuf[0]=0;
+	if (ifgreo[IFLA_EOIP_KA_INTERVAL])
+		kai=rta_getattr_u32(ifgreo[IFLA_EOIP_KA_INTERVAL]);
+	if (ifgreo[IFLA_EOIP_KA_RETRIES])
+		kar=rta_getattr_u8(ifgreo[IFLA_EOIP_KA_RETRIES]);
+	if (kai==0)
+		snprintf(kbuf,len," keepalive none");
+	else if (kai>0)
+		snprintf(kbuf,len," keepalive %ld,%d",kai,kar);
+}
 
 int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsghdr *n, void *arg __attribute((unused))) {
 	struct ndmsg *r = NLMSG_DATA(n);
 	int len = n->nlmsg_len;
 	struct rtattr *ifattr[IFLA_MAX+1];
 	struct rtattr *ifinfo[IFLA_INFO_MAX+1];
-	struct rtattr *ifgreo[IFLA_GRE_MAX+1];
+	struct rtattr *ifgreo[EOIP_PARSE_MAX+1];
 	const char *ifname;
 	const char *kind;
 	struct in_addr sip,dip;
@@ -50,12 +72,12 @@ int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsg
 	else
 		kind="";
 	if (!strcmp(kind,"eoip") && ifinfo[IFLA_INFO_DATA]) {
-		char ts[IFNAMSIZ],td[IFNAMSIZ];
+		char ts[IFNAMSIZ],td[IFNAMSIZ],kbuf[40];
 		uint8_t ttl=0,tos=0;
 		int tunid=0;
 		int link=0;
 
-		parse_rtattr_nested(ifgreo, IFLA_GRE_MAX, ifinfo[IFLA_INFO_DATA]);
+		parse_rtattr_nested(ifgreo, EOIP_PARSE_MAX, ifinfo[IFLA_INFO_DATA]);
 		if (ifgreo[IFLA_GRE_LINK])
 			link=rta_getattr_u32(ifgreo[IFLA_GRE_LINK]);
 		if (ifgreo[IFLA_GRE_TOS])
@@ -68,9 +90,33 @@ int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsg
 			dip.s_addr=rta_getattr_u32(ifgreo[IFLA_GRE_REMOTE]);
 		if (ifgreo[IFLA_GRE_IKEY])
 			tunid=rta_getattr_u32(ifgreo[IFLA_GRE_IKEY]);
+		ka_suffix(ifgreo,kbuf,sizeof kbuf);
 		strcpy(ts,inet_ntoa(sip));
 		strcpy(td,inet_ntoa(dip));
-		printf("%d: %s@%d: link/%s %s remote %s tunnel-id %d ttl %d tos %d\n",ifi->ifi_index,ifname,link,kind,ts,td,tunid,ttl,tos);
+		printf("%d: %s@%d: link/%s %s remote %s tunnel-id %d ttl %d tos %d%s\n",ifi->ifi_index,ifname,link,kind,ts,td,tunid,ttl,tos,kbuf);
+	} else if (!strcmp(kind,"eoipv6") && ifinfo[IFLA_INFO_DATA]) {
+		char ts[INET6_ADDRSTRLEN],td[INET6_ADDRSTRLEN],kbuf[40];
+		uint8_t ttl=0,tos=0;
+		int tunid=0;
+		int link=0;
+
+		parse_rtattr_nested(ifgreo, EOIP_PARSE_MAX, ifinfo[IFLA_INFO_DATA]);
+		strcpy(ts,"::");
+		strcpy(td,"::");
+		if (ifgreo[IFLA_GRE_LINK])
+			link=rta_getattr_u32(ifgreo[IFLA_GRE_LINK]);
+		if (ifgreo[IFLA_GRE_TOS])
+			tos=rta_getattr_u8(ifgreo[IFLA_GRE_TOS]);
+		if (ifgreo[IFLA_GRE_TTL])
+			ttl=rta_getattr_u8(ifgreo[IFLA_GRE_TTL]);
+		if (ifgreo[IFLA_GRE_LOCAL]&&RTA_PAYLOAD(ifgreo[IFLA_GRE_LOCAL])>=16)
+			inet_ntop(AF_INET6,RTA_DATA(ifgreo[IFLA_GRE_LOCAL]),ts,sizeof ts);
+		if (ifgreo[IFLA_GRE_REMOTE]&&RTA_PAYLOAD(ifgreo[IFLA_GRE_REMOTE])>=16)
+			inet_ntop(AF_INET6,RTA_DATA(ifgreo[IFLA_GRE_REMOTE]),td,sizeof td);
+		if (ifgreo[IFLA_GRE_IKEY])
+			tunid=rta_getattr_u32(ifgreo[IFLA_GRE_IKEY]);
+		ka_suffix(ifgreo,kbuf,sizeof kbuf);
+		printf("%d: %s@%d: link/%s %s remote %s tunnel-id %d ttl %d tos %d%s\n",ifi->ifi_index,ifname,link,kind,ts,td,tunid,ttl,tos,kbuf);
 	}
 
 	return 0;
@@ -98,7 +144,7 @@ static int list(void) {
 	return 0;
 }
 
-static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t dip,uint32_t link,uint8_t ttl,uint8_t tos) {
+static int eoip_add(int excl,char *name,uint32_t tunnelid,int af,void *sip,void *dip,uint32_t link,uint8_t ttl,uint8_t tos,int kaset,uint32_t kai,uint8_t kar) {
 	struct {
 		struct nlmsghdr msg;
 		struct ifinfomsg ifi;
@@ -107,6 +153,8 @@ static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t 
 	struct rtnl_handle rth = { .fd = -1 };
 	struct rtattr *lnfo;
 	struct rtattr *data;
+	int alen=af==AF_INET6?16:4;
+	const char *kind=af==AF_INET6?"eoipv6":"eoip";
 
 	memset(&req, 0, sizeof(req));
 	req.msg.nlmsg_type = RTM_NEWLINK;
@@ -120,16 +168,21 @@ static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t 
 		addattr_l(&req.msg, sizeof(req), IFLA_IFNAME, name, strlen(name));
 	lnfo = NLMSG_TAIL(&req.msg);
 	addattr_l(&req.msg, sizeof(req), IFLA_LINKINFO, NULL, 0);
-	addattr_l(&req.msg, sizeof(req), IFLA_INFO_KIND, "eoip", strlen("eoip"));
+	addattr_l(&req.msg, sizeof(req), IFLA_INFO_KIND, kind, strlen(kind));
 	data = NLMSG_TAIL(&req.msg);
 	addattr_l(&req.msg, sizeof(req), IFLA_INFO_DATA, NULL, 0);
 
 	addattr32(&req.msg, sizeof(req), IFLA_GRE_IKEY, tunnelid);
-	addattr32(&req.msg, sizeof(req), IFLA_GRE_LOCAL, sip);
-	addattr32(&req.msg, sizeof(req), IFLA_GRE_REMOTE, dip);
+	addattr_l(&req.msg, sizeof(req), IFLA_GRE_LOCAL, sip, alen);
+	addattr_l(&req.msg, sizeof(req), IFLA_GRE_REMOTE, dip, alen);
 	addattr32(&req.msg, sizeof(req), IFLA_GRE_LINK, link);
 	addattr8(&req.msg, sizeof(req), IFLA_GRE_TTL, ttl);
 	addattr8(&req.msg, sizeof(req), IFLA_GRE_TOS, tos);
+	// only when requested, so that set does not clobber keepalive
+	if (kaset) {
+		addattr32(&req.msg, sizeof(req), IFLA_EOIP_KA_INTERVAL, kai);
+		addattr8(&req.msg, sizeof(req), IFLA_EOIP_KA_RETRIES, kar);
+	}
 
 	data->rta_len = (void *)NLMSG_TAIL(&req.msg) - (void *)data;
 	lnfo->rta_len = (void *)NLMSG_TAIL(&req.msg) - (void *)lnfo;
@@ -148,6 +201,19 @@ static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t 
 
 	rtnl_close(&rth);
 	return 0;
+}
+
+// parse an IPv4 or IPv6 address, recording the family
+static int parse_addr(const char *s,int *af,void *buf) {
+	if (inet_pton(AF_INET,s,buf)==1) {
+		*af=AF_INET;
+		return 0;
+	}
+	if (inet_pton(AF_INET6,s,buf)==1) {
+		*af=AF_INET6;
+		return 0;
+	}
+	return -1;
 }
 
 /* strict numeric argument parser; returns 0 and stores the value only
@@ -182,6 +248,7 @@ typedef enum {
 	P_TOS,
 	P_LINK,
 	P_NAME,
+	P_KEEPALIVE,
 } e_cmd;
 
 typedef struct {
@@ -214,6 +281,7 @@ static s_cmd prms[] = {
 	{ .cmd = "tos", .cid = P_TOS, },
 	{ .cmd = "link", .cid = P_LINK, },
 	{ .cmd = "name", .cid = P_NAME, },
+	{ .cmd = "keepalive", .cid = P_KEEPALIVE, },
 	{ .cmd = NULL, .cid = 0, },
 };
 
@@ -252,10 +320,13 @@ static void version(void) {
 
 static void usage(char *me) {
 	printf("usage:\n"
-		"\t%s add [name <name>] tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>]\n"
-		"\t%s set  name <name>  tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>]\n"
+		"\t%s add [name <name>] tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>] [keepalive <secs>[,<retries>]|keepalive none]\n"
+		"\t%s set  name <name>  tunnel-id <id> [local <ip>] remote <ip> [ttl <ttl>] [tos <tos>] [link <ifindex|ifname>] [keepalive <secs>[,<retries>]|keepalive none]\n"
 		"\t%s list\n"
 		"\t%s version\n"
+		"notes:\n"
+		"\tIPv6 local/remote addresses select the eoipv6 tunnel kind (tunnel-id 0..4095)\n"
+		"\tkeepalive is off by default; retries defaults to 10 (the RouterOS default is 10,10); retries 0 means send-only\n"
 		,me,me,me,me);
 }
 
@@ -284,16 +355,19 @@ int main(int argc,char **argv) {
 				// fall through
 			case C_ADD: {
 				char ifname[IFNAMSIZ + 1] = "";
-				uint32_t sip = htonl(0), dip = htonl(0);
+				unsigned char sip[16]={0},dip[16]={0};
+				int saf=0,daf=0,af;
 				uint32_t tid = ~0;
 				uint8_t ttl=0, tos=0;
 				uint32_t link = 0;
+				uint32_t kai=0;
+				uint8_t kar=0;
+				int kaset=0;
 				int i=2;
 
 				while (i < argc) {
 					e_cmd p = find_cmd(prms, argv[i]);
 					int noarg=!((i + 1) < argc);
-					struct in_addr iad;
 					unsigned long num;
 
 					switch (p) {
@@ -356,19 +430,45 @@ int main(int argc,char **argv) {
 							tid=num;
 							break;
 						case P_LOCAL:
-							if (!inet_aton(argv[i + 1], &iad)) {
-								printf("invalid ip address: %s\n", argv[i + 1]);
+							if (parse_addr(argv[i+1],&saf,sip)) {
+								printf("invalid ip address: %s\n",argv[i+1]);
 								return 1;
 							}
-							sip = iad.s_addr;
 							break;
 						case P_REMOTE:
-							if (!inet_aton(argv[i + 1], &iad)) {
-								printf("invalid ip address: %s\n", argv[i + 1]);
+							if (parse_addr(argv[i+1],&daf,dip)) {
+								printf("invalid ip address: %s\n",argv[i+1]);
 								return 1;
 							}
-							dip = iad.s_addr;
 							break;
+						case P_KEEPALIVE: {
+							char *c=strchr(argv[i+1],',');
+
+							kaset=1;
+							if (!strcmp(argv[i+1],"none")) {
+								kai=0;
+								kar=0;
+								break;
+							}
+							if (c)
+								*c=0;
+							if (parse_num(argv[i+1],EOIP_KA_MAX_INTERVAL,&num)) {
+								printf("invalid keepalive interval: %s\n",argv[i+1]);
+								return 1;
+							}
+							kai=num;
+							if (c) {
+								if (parse_num(c+1,0xff,&num)) {
+									printf("invalid keepalive retries: %s\n",c+1);
+									return 1;
+								}
+								kar=num;
+							} else
+								kar=EOIP_KA_DEF_RETRIES;
+							if (!kai)
+								kar=0;
+							break;
+						}
 					}
 					i += 2;
 				}
@@ -380,8 +480,18 @@ int main(int argc,char **argv) {
 					printf("name is mandatory for set/change\n");
 					return 1;
 				}
+				if (saf&&daf&&saf!=daf) {
+					printf("local/remote address family mismatch\n");
+					return 1;
+				}
+				// IPv6 addresses select the eoipv6 tunnel kind
+				af=saf?saf:daf?daf:AF_INET;
+				if (af==AF_INET6&&tid>EOIP6_TID_MAX) {
+					printf("tunnel-id must be 0..%d for eoipv6\n",EOIP6_TID_MAX);
+					return 1;
+				}
 				// tunnel id is in host byte order, addresses are in net byte order
-				return eoip_add(excl,ifname,tid,sip,dip,link,ttl,tos)?1:0;
+				return eoip_add(excl,ifname,tid,af,sip,dip,link,ttl,tos,kaset,kai,kar)?1:0;
 			}
 		}
 	}
