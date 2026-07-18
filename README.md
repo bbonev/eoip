@@ -28,8 +28,6 @@ make KDIR=/lib/modules/X.Y.Z/build   # or against specific headers
 make install
 ````
 
-The per-version `out-of-tree-X.Y.x` directories and `kernel-patch/` patches are retained for reference under `obsolete/`, but the unified build is preferred.
-
 -   To build the userland management utility `eoip`:
 
 ````shell
@@ -47,10 +45,6 @@ ip link set eoip0 up
 ````
 
 Nothing else needs to be loaded, removed or blacklisted: the stock `gre` module is left untouched.
-
-### Legacy per-version builds
-
-The `obsolete/` directory keeps the historical per-version kernel patches (`obsolete/kernel-patch/`) and out-of-tree build directories (`obsolete/out-of-tree-X.Y.x/`) for reference only. They used an older design that shipped a modified GRE demultiplexer (`gre.ko`) alongside `eoip.ko`; the unified build above supersedes them and needs no kernel module replacement.
 
 ### DKMS
 
