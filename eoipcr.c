@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <errno.h>
 #include <string.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
@@ -41,7 +42,7 @@ int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsg
 	else
 		ifname="";
 	if (ifattr[IFLA_LINKINFO])
-		parse_rtattr(ifinfo, IFLA_INFO_MAX, (void *)rta_getattr_str(ifattr[IFLA_LINKINFO]), ifattr[IFLA_LINKINFO]->rta_len);
+		parse_rtattr_nested(ifinfo, IFLA_INFO_MAX, ifattr[IFLA_LINKINFO]);
 	else
 		memset(ifinfo,0,sizeof ifinfo);
 	if (ifinfo[IFLA_INFO_KIND])
@@ -54,7 +55,7 @@ int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsg
 		int tunid=0;
 		int link=0;
 
-		parse_rtattr(ifgreo, IFLA_GRE_MAX, (void *)rta_getattr_str(ifinfo[IFLA_INFO_DATA]), ifinfo[IFLA_INFO_DATA]->rta_len);
+		parse_rtattr_nested(ifgreo, IFLA_GRE_MAX, ifinfo[IFLA_INFO_DATA]);
 		if (ifgreo[IFLA_GRE_LINK])
 			link=rta_getattr_u32(ifgreo[IFLA_GRE_LINK]);
 		if (ifgreo[IFLA_GRE_TOS])
@@ -75,23 +76,26 @@ int print_link(const struct sockaddr_nl *who __attribute((unused)), struct nlmsg
 	return 0;
 }
 
-void list(void) {
+static int list(void) {
 	struct rtnl_handle rth;
 
 	if (rtnl_open(&rth,0)) {
 		perror("Cannot open rtnetlink");
-		return;
+		return -1;
 	}
 	if (rtnl_wilddump_request(&rth, AF_UNSPEC, RTM_GETLINK) < 0) {
 		perror("Cannot send dump request");
-		return;
+		rtnl_close(&rth);
+		return -1;
 	}
 
 	if (rtnl_dump_filter(&rth, print_link, NULL) < 0) {
 		fprintf(stderr, "Dump terminated\n");
-		return;
+		rtnl_close(&rth);
+		return -1;
 	}
 	rtnl_close(&rth);
+	return 0;
 }
 
 static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t dip,uint32_t link,uint8_t ttl,uint8_t tos) {
@@ -135,10 +139,28 @@ static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t 
 
 	if (rtnl_talk(&rth, &req.msg, 0, 0, NULL) < 0) {
 		fprintf(stderr, "failed to talk to netlink!\n");
+		rtnl_close(&rth);
 		return -1;
 	}
 
 	rtnl_close(&rth);
+	return 0;
+}
+
+/* strict numeric argument parser; returns 0 and stores the value only
+ * for a fully numeric string within [0, max]
+ */
+static int parse_num(const char *s,unsigned long max,unsigned long *val) {
+	char *end;
+	unsigned long v;
+
+	if (!s||!*s)
+		return -1;
+	errno=0;
+	v=strtoul(s,&end,0);
+	if (errno||*end||v>max)
+		return -1;
+	*val=v;
 	return 0;
 }
 
@@ -242,6 +264,8 @@ int main(int argc,char **argv) {
 		switch (c) {
 			dafeutl:
 			default:
+				usage(argv[0]);
+				return 1;
 			case C_HELP:
 				usage(argv[0]);
 				return 0;
@@ -251,8 +275,7 @@ int main(int argc,char **argv) {
 			case C_LIST:
 				if (argc > 2)
 					goto dafeutl;
-				list();
-				return 0;
+				return list()?1:0;
 			case C_SET:
 				excl = 0;
 				// fall through
@@ -268,77 +291,90 @@ int main(int argc,char **argv) {
 					e_cmd p = find_cmd(prms, argv[i]);
 					int noarg=!((i + 1) < argc);
 					struct in_addr iad;
+					unsigned long num;
 
 					switch (p) {
 						default:
 							break;
 						case E_NONE:
 							printf("unknown option: %s\n", argv[i]);
-							return 0;
+							return 1;
 						case E_AMBIGUOUS:
 							printf("option is ambiguous: %s\n", argv[i]);
-							return 0;
+							return 1;
 					}
 
 					if (noarg) {
 						printf("option: %s requires an argument\n", argv[i]);
-						return 0;
+						return 1;
 					}
 
 					switch (p) {
 						default:
 							printf("BUG!\n");
-							return 0;
+							return 1;
 						case P_NAME:
-							ifname[(sizeof ifname)-1] = 0;
-							strncpy(ifname,argv[i + 1], IFNAMSIZ);
+							if (strlen(argv[i+1])>=IFNAMSIZ) {
+								printf("interface name too long: %s\n",argv[i+1]);
+								return 1;
+							}
+							strcpy(ifname,argv[i+1]);
 							break;
 						case P_TTL:
-							ttl=atoi(argv[i + 1]);
+							if (parse_num(argv[i+1],0xff,&num)) {
+								printf("invalid ttl value: %s\n",argv[i+1]);
+								return 1;
+							}
+							ttl=num;
 							break;
 						case P_TOS:
-							tos=atoi(argv[i + 1]);
+							if (parse_num(argv[i+1],0xff,&num)) {
+								printf("invalid tos value: %s\n",argv[i+1]);
+								return 1;
+							}
+							tos=num;
 							break;
 						case P_LINK:
-							// convert ifname to ifinidex, also support numeric arg
-							link=if_nametoindex(argv[i + 1]);
-							if (!link)
-								link=atoi(argv[i + 1]);
+							// convert ifname to ifindex, also support numeric arg
+							link=if_nametoindex(argv[i+1]);
 							if (!link) {
-								printf("invalid interface name/index: %s\n", argv[i + 1]);
-								return 0;
+								if (parse_num(argv[i+1],0x7fffffff,&num)||!num) {
+									printf("invalid interface name/index: %s\n",argv[i+1]);
+									return 1;
+								}
+								link=num;
 							}
 							break;
 						case P_TUNNELID:
-							tid=atoi(argv[i + 1]);
+							if (parse_num(argv[i+1],0xffff,&num)) {
+								printf("invalid tunnel-id value: %s\n",argv[i+1]);
+								return 1;
+							}
+							tid=num;
 							break;
 						case P_LOCAL:
 							if (!inet_aton(argv[i + 1], &iad)) {
 								printf("invalid ip address: %s\n", argv[i + 1]);
-								return 0;
+								return 1;
 							}
 							sip = iad.s_addr;
 							break;
 						case P_REMOTE:
 							if (!inet_aton(argv[i + 1], &iad)) {
 								printf("invalid ip address: %s\n", argv[i + 1]);
-								return 0;
+								return 1;
 							}
 							dip = iad.s_addr;
 							break;
 					}
 					i += 2;
 				}
-				if (tid > 0xffff) {
-					if (tid == ~0U)
-						printf("tunnel-id is mandatory parameter\n");
-					else
-						printf("invalid tunnel-id value: %u\n",tid);
-					return 0;
+				if (tid==~0U) {
+					printf("tunnel-id is mandatory parameter\n");
+					return 1;
 				}
 				// tunnel id is in host byte order, addresses are in net byte order
-				eoip_add(excl,ifname,tid,sip,dip,link,ttl,tos);
-				return 0;
+				return eoip_add(excl,ifname,tid,sip,dip,link,ttl,tos)?1:0;
 			}
 		}
 	}
