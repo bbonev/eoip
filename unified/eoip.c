@@ -938,20 +938,37 @@ static void eoip_setup(struct net_device *dev)
 	dev->tx_queue_len = 0;	/* selects noqueue before v4.3 */
 #endif
 
-	/* lockless transmit, we do not generate output sequences */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-	dev->lltx = true;
-#else
+	/* lockless transmit, we do not generate output sequences; the
+	 * feature flag was removed in v6.12 for a dev->lltx bitfield.
+	 * Feature-detect the macro rather than the version code: distro
+	 * kernels (RHEL/AlmaLinux 9.x) backport the change under an
+	 * unchanged 5.14 version code.
+	 */
+#ifdef NETIF_F_LLTX
 	dev->features |= NETIF_F_LLTX;
+#else
+	dev->lltx = true;
 #endif
 
-	/* the tunnel is bound to the netns it was created in */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
-	dev->netns_immutable = true;
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
-	dev->netns_local = true;
-#else
+	/* the tunnel is bound to the netns it was created in; the feature
+	 * flag was removed in v6.12 for a netns_local bitfield, itself
+	 * renamed to netns_immutable in v6.15.  RHEL/AlmaLinux backport
+	 * all of this under a 5.14 version code (netns_local in 9.6,
+	 * netns_immutable from 9.7), so detect the macro and, when it is
+	 * gone, choose the field name from the mainline or RHEL version.
+	 */
+#ifdef NETIF_F_NETNS_LOCAL
 	dev->features |= NETIF_F_NETNS_LOCAL;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+	dev->netns_immutable = true;
+#elif defined(RHEL_RELEASE_CODE)
+# if RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 7)
+	dev->netns_immutable = true;
+# else
+	dev->netns_local = true;
+# endif
+#else
+	dev->netns_local = true;
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)

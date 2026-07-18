@@ -401,7 +401,11 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 	if (unlikely(greh->flags & (GRE_VERSION | GRE_ROUTING)))
 		return -EINVAL;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
+	/* v6.10 turned tpi->flags into a bitmap and made this a fill
+	 * function; detect that by the macro it introduced rather than the
+	 * version code (RHEL/AlmaLinux 9.x backport it under 5.14)
+	 */
+#ifdef IP_TUNNEL_DECLARE_FLAGS
 	gre_flags_to_tnl_flags(tpi->flags, greh->flags);
 #else
 	tpi->flags = gre_flags_to_tnl_flags(greh->flags);
