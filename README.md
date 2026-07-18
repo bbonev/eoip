@@ -17,7 +17,7 @@ This code was developed on a 3.2.44 linux kernel and tested on the next 3.2.x re
 
 ### Unified out-of-tree build (recommended)
 
-The `unified/` directory contains a single set of sources (`eoip.c`, `gre.c`) that builds unmodified on all supported kernels (3.2 up to 7.0+) using `LINUX_VERSION_CODE` conditionals. No patching happens at build time and every kernel version gets the same features at the same time:
+The `unified/` directory contains a single set of sources (`eoip.c`, `gre.c`, `eoipv6.c`) that builds unmodified on all supported kernels (3.2 up to 7.0+) using `LINUX_VERSION_CODE` conditionals. No patching happens at build time and every kernel version gets the same features at the same time. `eoipv6.ko` is built automatically when the kernel has IPv6 support and is fully standalone (it does not need the replacement `gre.ko`):
 
 ````shell
 cd path-to-eoip/unified
@@ -118,7 +118,7 @@ Userland management utility
 ### Important notes
 
 -   Normally EoIP tunnels in MikroTiks work well by only specifying the remote IP address. This code requires to configure both ends in a symmetrical way - each end of the tunnel should have the local IP address configured and equal to the remote IP address configured on the other end.
--   This code does not support the keepalive option; configure the tunnel on MikroTik's end with `!keepalive`.
+-   Keepalive is supported but off by default; either enable it (`keepalive 10,10` matches the RouterOS default) or configure the tunnel on MikroTik's end with `!keepalive`.
 -   It is a good idea to use IP fragmentation and to set MTU on both ends to 1500; using `clamp-tcp-mss` is pointless in this case. For performance it would be best if the transport network's MTU is 42+tunnel MTU (42 bytes is the EoIP protocol overhead) but obviously that is not the case over the Internet.
 -   The EoIP protocol is connection-less and requires both ends to be able to reach the other end. In case only one end has a public IP, the other end may establish a private network by using another protocol that works over NAT (e.g. `PPTP`, `L2TP`, etc.) and run EoIP on top of the newly established private network.
 -   Security warning: EoIP is a simple encapsulation and does implement any transport security.
@@ -131,7 +131,10 @@ Userland management utility
     eoip add tunnel-id <tunnel-id> [name <if-name>]
              [local <src-address>] [remote <dst-address>]
              [link <ifindex>] [ttl <ttl>] [tos <tos>]
+             [keepalive none|<secs>[,<retries>]]
 ````
+
+IPv6 local/remote addresses select the `eoipv6` tunnel kind (tunnel-id 0..4095, `ttl` sets the hop limit, `tos` the traffic class). Keepalive is off by default; `keepalive <secs>` implies the RouterOS default of 10 retries and `keepalive <secs>,0` selects send-only mode (transmit keepalives, never drop the carrier).
 
 -   to change existing eoip tunnel interface:
 
@@ -139,7 +142,10 @@ Userland management utility
     eoip change name <if-name> tunnel-id <tunnel-id>
                 [local <src-address>] [remote <dst-address>]
                 [link <ifindex>] [ttl <ttl>] [tos <tos>]
+                [keepalive none|<secs>[,<retries>]]
 ````
+
+When the keepalive option is not given, `change` leaves the current keepalive configuration untouched.
 
 -   to list existing eoip tunnels:
 
@@ -175,8 +181,10 @@ Roadmap
 
     The problem in making a stand-alone EoIP kernel module is that it requires replacing gre_demux (`gre.ko`). Linux kernel does not support overloading IP protocol handlers and EoIP does not fit anywhere in the standard gre_demux logic. A relatively sane solution might be to include the GRE demultiplexing logic in the EoIP kernel module itself, to provide a `gre` alias and to blacklist the original `gre.ko`. In this way GRE and PPTP would still be able to coexist with EoIP.
 
--   make a DKMS package
--   implement the `keepalive` option and probably make it the default
+-   ~~make a DKMS package~~
+-   ~~implement the `keepalive` option (off by default for backward compatibility)~~
+-   ~~implement EoIPv6 (a different protocol, see the protocol spec) as a separate `eoipv6` kernel module~~
+-   IPsec integration compatible with RouterOS `ipsec-secret` (userland tooling around strongSwan)
 
 Development process
 -------------------
@@ -205,6 +213,61 @@ Header format (taken from https://github.com/katuma/eoip):
 ````
 
 Strangely enough the frame length is kept into network byte order while tunnel ID is in little endian byte order.
+
+### Keepalive packet format (EoIP)
+
+A keepalive is a normal EoIP datagram with the encapsulated frame length field set to zero and no payload - i.e. exactly the 8 header bytes:
+
+````none
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|       GRE FLAGS 0x20 0x01     |      Protocol Type  0x6400    | = MAGIC "\x20\x01\x64\x00"
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|   Frame length 0x00 0x00      |           Tunnel ID           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+````
+
+For example a keepalive for tunnel ID 7 is `20 01 64 00 00 00 07 00` (the tunnel ID is little endian, as in data packets).
+
+### EoIPv6 protocol spec
+
+MikroTik's EoIPv6 (`/interface eoipv6`) is a completely different protocol from EoIP: it does not use GRE at all. After the IPv6 header (Next Header 97, the EtherIP protocol number from RFC 3378) a 2 byte header follows, then the raw Ethernet frame:
+
+````none
+ 0                   1
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| TID_H |0 0 1 1|     TID_L     |  TID_H = tunnel ID bits 11..8, 0x3 = version
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| Ethernet frame...             |
+````
+
+-   The tunnel ID is only 12 bits (0..4095), packed as `byte0 = (TID>>8)<<4 | 0x3`, `byte1 = TID & 0xff`; e.g. tunnel ID 1234 (0x4d2) is sent as `43 d2` and tunnel ID 0 as `03 00`.
+-   Although the header size and protocol number come from EtherIP (RFC 3378), the format violates the RFC twice: the version nibble sits in the low nibble of byte 0 instead of the high one, and the "reserved, must be zero" bits carry the tunnel ID.
+-   There is no frame length field; the encapsulated frame length is simply the IPv6 payload length minus 2.
+-   The receiver demultiplexes tunnels by the (source address, tunnel ID) pair.
+-   The default interface MTU on a 1500 byte path is 1444 (1500 - 40 IPv6 - 2 header - 14 Ethernet), compared to 1458 for EoIP.
+-   RouterOS sends tunnel packets with hop limit 255, traffic class 0 and flow label 0 (observed on live captures for both keepalives and data packets).
+-   Encapsulated frames are not padded to the 60 byte Ethernet minimum - e.g. a 42 byte ARP frame is carried as-is (observed on a live capture).
+
+EoIPv6 is implemented by the standalone `eoipv6.ko` module (built from `unified/eoipv6.c` when the kernel has IPv6 support); unlike the EoIP pair it does not need the replacement GRE demultiplexer.
+
+### Keepalive packet format (EoIPv6)
+
+A bare 2 byte header with no payload - the only way to express an empty frame in a format without a length field. Verified against a live RouterOS capture: a keepalive for tunnel ID 1234 is an IPv6 datagram with next header 97, payload length 2, hop limit 255, traffic class 0, flow label 0 and payload bytes `43 d2`.
+
+A peer that does not implement EoIPv6 answers each keepalive with ICMPv6 parameter problem (code 1, unrecognized next header, pointer 6); RouterOS ignores these and keeps transmitting.
+
+### Keepalive semantics
+
+The semantics below are verified for EoIP (RouterOS behavior and the interoperating in-kernel OpenBSD `eoip(4)` implementation) and are presumed identical for EoIPv6. RouterOS configures them as `keepalive=interval,retries` with a default of `10s,10`:
+
+-   Each side independently transmits one keepalive every `interval`; keepalives are not echoed and there is no reply - each side just listens for the other's keepalives.
+-   Only received keepalives count as a sign of peer liveness; received data frames do not. This is why a RouterOS tunnel with keepalive enabled shows `not running` against a peer that passes traffic but sends no keepalives.
+-   When nothing is heard for `interval * retries` (100 seconds with the defaults), RouterOS clears the interface running flag. Keepalive transmission continues while the peer is considered down, which is what makes both ends recover automatically; the running flag returns when keepalives are heard again.
+
+Both modules implement these semantics with `keepalive <interval>[,<retries>]`; keepalive is off by default for backward compatibility (a tunnel without keepalive silently consumes received keepalives), `retries` defaults to the RouterOS value of 10 and `retries` 0 selects send-only mode. When monitoring is enabled, the interface carrier is dropped after `interval * retries` of silence and restored by the first received keepalive, so bridges, bonding and routing react to peer loss the Linux-native way.
 
 Bugs
 ----
