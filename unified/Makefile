@@ -11,6 +11,9 @@ ifneq ($(KERNELRELEASE),)
 
 obj-m := eoip.o
 obj-m += gre.o
+ifneq ($(CONFIG_IPV6),)
+obj-m += eoipv6.o
+endif
 
 else
 
