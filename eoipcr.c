@@ -114,7 +114,10 @@ static int eoip_add(int excl,char *name,uint16_t tunnelid,uint32_t sip,uint32_t 
 	req.msg.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | (excl ? NLM_F_EXCL : 0);
 	req.ifi.ifi_family = AF_UNSPEC;
 
-	addattr_l(&req.msg, sizeof(req), IFLA_IFNAME, name, strlen(name));
+	// an empty IFLA_IFNAME fails kernel policy validation with ERANGE;
+	// omit the attribute and the kernel will pick a free eoip%d name
+	if (*name)
+		addattr_l(&req.msg, sizeof(req), IFLA_IFNAME, name, strlen(name));
 	lnfo = NLMSG_TAIL(&req.msg);
 	addattr_l(&req.msg, sizeof(req), IFLA_LINKINFO, NULL, 0);
 	addattr_l(&req.msg, sizeof(req), IFLA_INFO_KIND, "eoip", strlen("eoip"));
@@ -371,6 +374,10 @@ int main(int argc,char **argv) {
 				}
 				if (tid==~0U) {
 					printf("tunnel-id is mandatory parameter\n");
+					return 1;
+				}
+				if (!excl&&!*ifname) {
+					printf("name is mandatory for set/change\n");
 					return 1;
 				}
 				// tunnel id is in host byte order, addresses are in net byte order
