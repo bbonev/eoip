@@ -2,8 +2,7 @@
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
-# upstream version (strip the Debian revision and any epoch)
-VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/-[^-]*$$//' -e 's/^[0-9]*://')
+VERSION := $(shell ./version.sh)
 DKMSDIR := debian/eoip-dkms/usr/src/eoip-$(VERSION)
 
 %:
