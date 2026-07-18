@@ -1,0 +1,53 @@
+Source: eoip
+Section: net
+Priority: optional
+Maintainer: Boian Bonev <bbonev@ipacct.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-sequence-dkms,
+Standards-Version: 4.7.2
+Homepage: https://github.com/bbonev/eoip
+Vcs-Browser: https://github.com/bbonev/eoip
+Vcs-Git: https://github.com/bbonev/eoip.git
+Rules-Requires-Root: no
+
+Package: eoip
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Recommends:
+ eoip-dkms (= ${source:Version}),
+Description: MikroTik compatible EoIP tunnel management tool
+ EoIP (Ethernet over IP) is a MikroTik RouterOS compatible protocol that
+ transports Ethernet frames over an IPv4 or IPv6 network, presenting a
+ transparent layer 2 link between two endpoints.
+ .
+ This package provides the eoip command line utility, which creates and
+ configures eoip and eoipv6 tunnel interfaces over rtnetlink.  The kernel
+ side is provided by the eoip-dkms package.
+
+Package: eoip-dkms
+Architecture: all
+Section: kernel
+Depends:
+ dkms,
+ ${misc:Depends},
+Recommends:
+ eoip,
+Description: MikroTik compatible EoIP tunnel kernel modules (DKMS)
+ EoIP (Ethernet over IP) is a MikroTik RouterOS compatible protocol that
+ transports Ethernet frames over an IPv4 or IPv6 network, presenting a
+ transparent layer 2 link between two endpoints.
+ .
+ This package provides the DKMS source for two kernel modules, built
+ automatically for the running kernel:
+ .
+  * eoip     - the EoIP (IPv4, protocol 47) tunnel driver;
+  * eoipv6   - the EoIPv6 (IPv6, protocol 97) tunnel driver.
+ .
+ Both modules are standalone and do not replace the in-tree gre module:
+ eoip intercepts its protocol-47 packets with a netfilter hook so standard
+ GRE and PPTP keep working.  A single set of sources builds on kernels from
+ 3.2 up to current releases.

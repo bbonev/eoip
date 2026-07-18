@@ -1,0 +1,26 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# upstream version (strip the Debian revision and any epoch)
+VERSION := $(shell dpkg-parsechangelog -SVersion | sed -e 's/-[^-]*$$//' -e 's/^[0-9]*://')
+DKMSDIR := debian/eoip-dkms/usr/src/eoip-$(VERSION)
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	$(MAKE) install \
+		PREFIX=$(CURDIR)/debian/eoip/usr/ \
+		STRIP=true
+	# install the module source tree for dkms
+	install -d $(DKMSDIR)/unified
+	cp -a Makefile eoip_version.h version.sh $(DKMSDIR)/
+	cp -a unified/*.c unified/*.h unified/Makefile $(DKMSDIR)/unified/
+
+override_dh_dkms:
+	dh_dkms -V $(VERSION)
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -f eoip *.o

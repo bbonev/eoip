@@ -1,0 +1,5 @@
+extend-diff-ignore = "(^|/)(eoip|.*\.(o|ko|mod|mod\.c|order|symvers|cmd))$"
+tar-ignore = "*.o"
+tar-ignore = "*.ko"
+tar-ignore = "eoip"
+tar-ignore = ".git"
