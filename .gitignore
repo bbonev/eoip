@@ -2,6 +2,7 @@
 eoip
 /eoip.ko
 /gre.ko
+/eoipv6.ko
 unified/*.ko
 unified/*.mod
 unified/*.mod.c
