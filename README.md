@@ -143,7 +143,9 @@ Roadmap
 
 -   ~~make a stand-alone EoIP kernel module that does not replace `gre.ko`~~
 
-    Historically EoIP required a modified `gre.ko` because the Linux kernel allows only one handler per IP protocol and the in-tree `gre` module owns protocol 47, while the non-standard EoIP header does not fit the standard demultiplexing logic. This is solved: `eoip.ko` now intercepts its own packets with a netfilter `LOCAL_IN` hook (registered lazily, only while a tunnel exists) and lets everything else fall through to the stock `gre` module, so standard GRE and PPTP coexist with EoIP without any kernel module replacement. `eoipv6.ko` was standalone from the start (protocol 97 has no in-tree handler).
+    Historically EoIP required a modified `gre.ko` because the Linux kernel allows only one handler per IP protocol and the in-tree `gre` module owns protocol 47, while the non-standard EoIP header does not fit the standard demultiplexing logic.
+
+    This is solved: `eoip.ko` now intercepts its own packets with a netfilter `LOCAL_IN` hook (registered lazily, only while a tunnel exists) and lets everything else fall through to the stock `gre` module, so standard GRE and PPTP coexist with EoIP without any kernel module replacement. `eoipv6.ko` was standalone from the start (protocol 97 has no in-tree handler).
 
 -   ~~make a DKMS package~~
 -   ~~implement the `keepalive` option (off by default for backward compatibility)~~
