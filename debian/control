@@ -1,15 +1,13 @@
 Source: eoip
 Section: net
-Priority: optional
 Maintainer: Boian Bonev <bbonev@ipacct.com>
 Build-Depends:
  debhelper-compat (= 13),
  dh-sequence-dkms,
-Standards-Version: 4.7.2
+Standards-Version: 4.7.4
 Homepage: https://github.com/bbonev/eoip
 Vcs-Browser: https://github.com/bbonev/eoip
 Vcs-Git: https://github.com/bbonev/eoip.git
-Rules-Requires-Root: no
 
 Package: eoip
 Architecture: any
