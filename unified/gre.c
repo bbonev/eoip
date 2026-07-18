@@ -61,6 +61,7 @@
 #include <net/route.h>
 #include <net/xfrm.h>
 
+#include "../eoip_version.h"
 #include "eoip_gre.h"
 
 /* handle protocols with a non-standard GRE header by ids that do not
@@ -579,7 +580,7 @@ static const struct net_protocol net_gre_protocol = {
 
 static int __init gre_init(void)
 {
-	pr_info("GRE over IPv4 demultiplexer driver (EoIP extended)\n");
+	pr_info("GRE over IPv4 demultiplexer driver (EoIP extended) v" EOIP_VERSION "\n");
 
 	if (inet_add_protocol(&net_gre_protocol, IPPROTO_GRE) < 0) {
 		pr_err("can't add protocol\n");
@@ -613,3 +614,4 @@ module_exit(gre_exit);
 MODULE_DESCRIPTION("GRE over IPv4 demultiplexer driver");
 MODULE_AUTHOR("D. Kozlov <xeb@mail.ru>");
 MODULE_LICENSE("GPL");
+MODULE_VERSION(EOIP_VERSION);
