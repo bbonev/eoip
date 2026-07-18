@@ -1,0 +1,145 @@
+.TH EOIP 8 "2026-07-18" "eoip 2.1" "System Administration"
+.SH NAME
+eoip \- manage MikroTik compatible EoIP and EoIPv6 tunnel interfaces
+.SH SYNOPSIS
+.B eoip add
+.RB [ name
+.IR if-name ]
+.B tunnel-id
+.IR id
+.RB [ local
+.IR src-address ]
+.B remote
+.IR dst-address
+.RB [ ttl
+.IR ttl ]
+.RB [ tos
+.IR tos ]
+.RB [ link
+.IR ifindex | ifname ]
+.RB [ keepalive
+.IR secs [, retries ]
+.RB | " keepalive none" ]
+.br
+.B eoip change name
+.IR if-name
+.B tunnel-id
+.IR id
+.RI [ ... ]
+.br
+.B eoip list
+.br
+.B eoip version
+.SH DESCRIPTION
+.B eoip
+creates, changes and lists EoIP (Ethernet over IP) tunnel interfaces.
+EoIP is a MikroTik RouterOS compatible protocol that carries whole
+Ethernet frames over an IPv4 or IPv6 transport network, presenting a
+transparent layer 2 link between the two endpoints.
+.PP
+The tunnel kind is selected automatically from the address family of the
+.B local
+and
+.B remote
+addresses: IPv4 addresses create an
+.B eoip
+interface (IP protocol 47), IPv6 addresses create an
+.B eoipv6
+interface (IP protocol 97).  The kernel modules from the
+.B eoip-dkms
+package must be loaded.
+.PP
+Both ends of a tunnel must be configured symmetrically: the
+.B local
+address of one end must equal the
+.B remote
+address of the other, and the
+.B tunnel-id
+must match.
+.SH COMMANDS
+.TP
+.B add
+Create a new tunnel interface.  The kernel assigns an
+.BR eoip N
+name when
+.B name
+is omitted.
+.TP
+.B change
+Change an existing tunnel interface, selected by
+.BR name .
+.TP
+.B list
+List all eoip and eoipv6 tunnel interfaces.
+.TP
+.B version
+Print the version and exit.
+.SH OPTIONS
+.TP
+.B tunnel-id \fIid\fR
+Tunnel identifier.  Mandatory.  0 to 65535 for eoip, 0 to 4095 for
+eoipv6.  Must match on both ends.
+.TP
+.B name \fIif-name\fR
+Interface name.  Mandatory for
+.BR change .
+.TP
+.B local \fIsrc-address\fR
+Local transport address.  Its family selects eoip or eoipv6.
+.TP
+.B remote \fIdst-address\fR
+Remote transport address.
+.TP
+.B ttl \fIttl\fR
+Outer hop limit (0 = use the path default).
+.TP
+.B tos \fItos\fR
+Outer type of service / traffic class.
+.TP
+.B link \fIifindex\fR|\fIifname\fR
+Bind the tunnel to a specific underlying device.
+.TP
+.B keepalive \fIsecs\fR[,\fIretries\fR] | keepalive none
+Configure keepalive.  Off by default.  A bare
+.I secs
+implies the RouterOS default of 10 retries;
+.I retries
+of 0 selects send-only mode (transmit keepalives but never drop the
+carrier).  When monitoring is enabled the interface carrier is dropped
+after
+.IR secs " * " retries
+of silence and restored on the first received keepalive.  When the
+option is omitted,
+.B change
+leaves the current keepalive configuration untouched.
+.SH EXAMPLES
+Create an IPv4 tunnel to a MikroTik at 198.51.100.11 with tunnel id 1234:
+.PP
+.RS
+.nf
+eoip add name eoip1234 local 203.0.113.50 remote 198.51.100.11 tunnel-id 1234
+ip link set eoip1234 up
+.fi
+.RE
+.PP
+Create an IPv6 tunnel and enable RouterOS default keepalive:
+.PP
+.RS
+.nf
+eoip add name eo6 local 2001:db8::1 remote 2001:db8::2 tunnel-id 42 keepalive 10,10
+.fi
+.RE
+.SH NOTES
+On the MikroTik side, either enable keepalive to match or configure the
+tunnel with
+.BR !keepalive .
+.PP
+EoIP provides no transport security; use it over trusted network or over some other
+encrypted transport.
+.PP
+IPsec support is not yet implemented in these modules.
+.SH SEE ALSO
+.BR ip (8),
+.BR ip-link (8)
+.SH AUTHOR
+Boian Bonev <bbonev@ipacct.com>
