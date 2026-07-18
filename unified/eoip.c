@@ -38,6 +38,8 @@
 #include <linux/if_tunnel.h>
 #include <linux/init.h>
 #include <linux/inetdevice.h>
+#include <linux/ip.h>
+#include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 #include <linux/etherdevice.h>
 #include <linux/if_ether.h>
@@ -55,7 +57,6 @@
 #include <net/rtnetlink.h>
 #include <net/route.h>
 #include <net/flow.h>
-#include <net/gre.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 /* v3.10 moved the tunnel definitions from net/ipip.h here; we need it
  * only for iptunnel_xmit_stats() and struct ip_tunnel_parm[_kern]
@@ -67,8 +68,12 @@
 #endif
 
 #include "../eoip_version.h"
-#include "eoip_gre.h"
+#include "eoip_proto.h"
 #include "eoip_keepalive.h"
+
+#if !IS_ENABLED(CONFIG_NETFILTER)
+#error "eoip requires CONFIG_NETFILTER"
+#endif
 
 /*
  * Backward compatibility shims.  Everything below the shims is written
@@ -153,7 +158,12 @@ static int eoip_tunnel_bind_dev(struct net_device *dev);
 static int eoip_net_id __read_mostly;
 struct eoip_net {
 	struct eoip_tunnel __rcu *tunnels[EOIP_HASH_SIZE];
+	unsigned int		ntunnels;	/* RTNL-guarded; drives the hook */
 };
+
+/* lazy netfilter hook registration, defined with the RX path below */
+static int eoip_hook_get(struct net *net, struct eoip_net *ign);
+static void eoip_hook_put(struct net *net, struct eoip_net *ign);
 
 /*
  * Locking : hash tables are protected by RCU and RTNL
@@ -258,71 +268,8 @@ static void eoip_if_uninit(struct net_device *dev)
 	struct eoip_net *ign = net_generic(net, eoip_net_id);
 
 	eoip_tunnel_unlink(ign, netdev_priv(dev));
+	eoip_hook_put(net, ign);
 	dev_put(dev);
-}
-
-static void eoip_err(struct sk_buff *skb, u32 info)
-{
-	/* skb->data points at the outer IP header; the gre demux has
-	 * already verified the EoIP magic before dispatching here, so
-	 * the EoIP header (magic[4] len[2] tid[2], tid little endian)
-	 * follows it directly.  ICMP is required to return at least 8
-	 * bytes of payload, which is exactly the full EoIP header.
-	 */
-	const struct iphdr *iph = (const struct iphdr *)skb->data;
-	const int type = icmp_hdr(skb)->type;
-	const int code = icmp_hdr(skb)->code;
-	struct eoip_tunnel *t;
-	u32 key;
-
-	if (skb_headlen(skb) < (iph->ihl<<2) + EOIP_HDR_LEN)
-		return;
-	key = le16_to_cpu(*(__le16 *)(skb->data + (iph->ihl<<2) + 6));
-
-	switch (type) {
-	default:
-	case ICMP_PARAMETERPROB:
-		return;
-
-	case ICMP_DEST_UNREACH:
-		switch (code) {
-		case ICMP_SR_FAILED:
-		case ICMP_PORT_UNREACH:
-			/* Impossible event. */
-			return;
-		case ICMP_FRAG_NEEDED:
-			/* Soft state for pmtu is maintained by IP core. */
-			return;
-		default:
-			/* All others are translated to HOST_UNREACH.
-			   rfc2003 contains "deep thoughts" about NET_UNREACH,
-			   I believe they are just ether pollution. --ANK
-			 */
-			break;
-		}
-		break;
-	case ICMP_TIME_EXCEEDED:
-		if (code != ICMP_EXC_TTL)
-			return;
-		break;
-	}
-
-	rcu_read_lock();
-	t = eoip_tunnel_lookup(skb->dev, iph->daddr, iph->saddr, key);
-	if (t == NULL || t->parms.iph.daddr == 0 ||
-			ipv4_is_multicast(t->parms.iph.daddr))
-		goto out;
-
-	if (t->parms.iph.ttl == 0 && type == ICMP_TIME_EXCEEDED)
-		goto out;
-
-	if (time_before(jiffies, t->err_time + IPTUNNEL_ERR_TIMEO))
-		t->err_count++;
-	else
-		t->err_count = 1;
-	t->err_time = jiffies;
-out:
-	rcu_read_unlock();
 }
 
 static void eoip_rx_stats(struct net_device *dev, unsigned int len)
@@ -440,6 +387,131 @@ drop_nolock:
 	return 0;
 }
 
+/*
+ * RX demultiplexing via a netfilter hook.
+ *
+ * EoIP data arrives as IPv4 protocol 47 (GRE) with a non-standard
+ * header.  The kernel allows only one handler per IP protocol and the
+ * in-tree gre module owns protocol 47, so rather than replacing that
+ * module we steal our own packets with an NF_INET_LOCAL_IN hook and let
+ * everything else fall through to the stock GRE demultiplexer.  The hook
+ * is registered lazily, per netns, only while at least one tunnel exists.
+ */
+
+static unsigned int eoip_nf_recv(struct sk_buff *skb)
+{
+	const struct iphdr *iph = ip_hdr(skb);
+	unsigned int iphlen;
+	u8 buf[EOIP_HDR_LEN], *h;
+
+	if (iph->protocol != IPPROTO_GRE)
+		return NF_ACCEPT;
+
+	iphlen = iph->ihl << 2;
+	h = skb_header_pointer(skb, iphlen, EOIP_HDR_LEN, buf);
+	if (!h || memcmp(h, EOIP_MAGIC, 4))
+		return NF_ACCEPT;	/* not EoIP: leave it for the gre demux */
+	if (!pskb_may_pull(skb, iphlen + EOIP_HDR_LEN))
+		return NF_ACCEPT;
+
+	/* reproduce the skb state the gre demux would have handed us: data
+	 * at the EoIP header, network header still at the outer iph
+	 */
+	skb_pull(skb, iphlen);
+	skb_reset_transport_header(skb);
+	eoip_rcv(skb);
+
+	return NF_STOLEN;
+}
+
+/* the nf_hookfn signature changed at v3.13, v4.1 and v4.4; the body is
+ * common - it only needs the skb (the netns comes from skb->dev)
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int eoip_nf_hook(unsigned int hooknum, struct sk_buff *skb,
+		const struct net_device *in, const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int eoip_nf_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb, const struct net_device *in,
+		const struct net_device *out, int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int eoip_nf_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb, const struct nf_hook_state *state)
+#else
+static unsigned int eoip_nf_hook(void *priv, struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#endif
+{
+	return eoip_nf_recv(skb);
+}
+
+static struct nf_hook_ops eoip_nf_ops __read_mostly = {
+	.hook = eoip_nf_hook,
+	.pf = NFPROTO_IPV4,
+	.hooknum = NF_INET_LOCAL_IN,
+	/* after the input filter chain, matching the stock protocol
+	 * handler's timing so INPUT firewalling still applies
+	 */
+	.priority = NF_IP_PRI_LAST,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+	.owner = THIS_MODULE,		/* removed from struct in v4.4 */
+#endif
+};
+
+/*
+ * The hook is shared by all tunnels in a netns.  It is registered when
+ * the first tunnel appears and removed with the last one; callers hold
+ * RTNL.  Per-net registration (v4.3+) keeps unrelated namespaces
+ * untouched; older kernels only have the global hook, counted across
+ * all namespaces.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+static int eoip_hook_get(struct net *net, struct eoip_net *ign)
+{
+	int err;
+
+	ASSERT_RTNL();
+	if (ign->ntunnels == 0) {
+		err = nf_register_net_hook(net, &eoip_nf_ops);
+		if (err)
+			return err;
+	}
+	ign->ntunnels++;
+	return 0;
+}
+
+static void eoip_hook_put(struct net *net, struct eoip_net *ign)
+{
+	ASSERT_RTNL();
+	if (--ign->ntunnels == 0)
+		nf_unregister_net_hook(net, &eoip_nf_ops);
+}
+#else
+static int eoip_hook_refcnt;	/* global hook, RTNL-guarded */
+
+static int eoip_hook_get(struct net *net, struct eoip_net *ign)
+{
+	int err;
+
+	ASSERT_RTNL();
+	if (eoip_hook_refcnt == 0) {
+		err = nf_register_hook(&eoip_nf_ops);
+		if (err)
+			return err;
+	}
+	eoip_hook_refcnt++;
+	return 0;
+}
+
+static void eoip_hook_put(struct net *net, struct eoip_net *ign)
+{
+	ASSERT_RTNL();
+	if (--eoip_hook_refcnt == 0)
+		nf_unregister_hook(&eoip_nf_ops);
+}
+#endif
+
 static void eoip_tx_stats(struct net_device *dev, int pkt_len)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
@@ -462,9 +534,11 @@ static void eoip_tx_stats(struct net_device *dev, int pkt_len)
 /* Route to the peer, prepend the outer IP + EoIP header (frame_size is
  * the value of the EoIP length field: the encapsulated frame length for
  * data, 0 for a keepalive) and hand the skb to ip_local_out().
- * Consumes the skb.  Error counters are always accounted; the tx byte
- * and packet counters only for data - keepalives are tunnel overhead,
- * not interface traffic.
+ * Consumes the skb.  Stats (both errors and tx byte/packet counters)
+ * are accounted only for data - keepalives are tunnel overhead, not
+ * interface traffic, so a failing keepalive must not inflate the error
+ * counters of an otherwise idle interface (peer loss shows as carrier
+ * down instead).
  */
 static void eoip_xmit_skb(struct eoip_tunnel *tunnel, struct sk_buff *skb,
 			u16 frame_size)
@@ -496,14 +570,16 @@ static void eoip_xmit_skb(struct eoip_tunnel *tunnel, struct sk_buff *skb,
 
 	rt = ip_route_output_key(dev_net(dev), &fl4);
 	if (IS_ERR(rt)) {
-		DEV_STATS_INC(dev, tx_carrier_errors);
+		if (frame_size)
+			DEV_STATS_INC(dev, tx_carrier_errors);
 		goto tx_error;
 	}
 	tdev = rt->dst.dev;
 
 	if (tdev == dev) {
 		ip_rt_put(rt);
-		DEV_STATS_INC(dev, collisions);
+		if (frame_size)
+			DEV_STATS_INC(dev, collisions);
 		goto tx_error;
 	}
 
@@ -516,7 +592,8 @@ static void eoip_xmit_skb(struct eoip_tunnel *tunnel, struct sk_buff *skb,
 		new_skb = skb_realloc_headroom(skb, max_headroom);
 		if (!new_skb) {
 			ip_rt_put(rt);
-			DEV_STATS_INC(dev, tx_dropped);
+			if (frame_size)
+				DEV_STATS_INC(dev, tx_dropped);
 			dev_kfree_skb(skb);
 			return;
 		}
@@ -590,7 +667,8 @@ static void eoip_xmit_skb(struct eoip_tunnel *tunnel, struct sk_buff *skb,
 	return;
 
 tx_error:
-	DEV_STATS_INC(dev, tx_errors);
+	if (frame_size)
+		DEV_STATS_INC(dev, tx_errors);
 	dev_kfree_skb(skb);
 }
 
@@ -737,11 +815,6 @@ static void eoip_dev_free(struct net_device *dev)
 }
 #endif
 
-static const struct gre_protocol eoip_protocol = {
-	.handler = eoip_rcv,
-	.err_handler = eoip_err,
-};
-
 static void eoip_destroy_tunnels(struct eoip_net *ign, struct list_head *head)
 {
 	int h;
@@ -841,6 +914,9 @@ static void eoip_netlink_parms(struct nlattr *data[],
 static int eoip_if_init(struct net_device *dev)
 {
 	struct eoip_tunnel *tunnel = netdev_priv(dev);
+	struct net *net = dev_net(dev);
+	struct eoip_net *ign = net_generic(net, eoip_net_id);
+	int err;
 
 	tunnel->dev = dev;
 	strscpy(tunnel->parms.name, dev->name, IFNAMSIZ);
@@ -859,6 +935,18 @@ static int eoip_if_init(struct net_device *dev)
 			u64_stats_init(&per_cpu_ptr(dev->tstats, i)->syncp);
 	}
 #endif
+
+	/* register the RX hook for this netns on the first tunnel;
+	 * ndo_init/ndo_uninit are balanced by the core, so eoip_hook_put()
+	 * in ndo_uninit matches this get
+	 */
+	err = eoip_hook_get(net, ign);
+	if (err) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 7, 0)
+		free_percpu(dev->tstats);
+#endif
+		return err;
+	}
 
 	/* balanced by dev_put() in ndo_uninit; taking the reference here
 	 * keeps it balanced even when register_netdevice() fails midway
@@ -1217,31 +1305,16 @@ static int __init eoip_init(void)
 	if (err < 0)
 		return err;
 
-	err = gre_add_protocol(&eoip_protocol, GREPROTO_NONSTD_EOIP);
-	if (err < 0) {
-		pr_info("eoip init: can't add protocol\n");
-		goto add_proto_failed;
-	}
-
 	err = rtnl_link_register(&eoip_ops);
 	if (err < 0)
-		goto eoip_ops_failed;
+		unregister_pernet_device(&eoip_net_ops);
 
-out:
 	return err;
-
-eoip_ops_failed:
-	gre_del_protocol(&eoip_protocol, GREPROTO_NONSTD_EOIP);
-add_proto_failed:
-	unregister_pernet_device(&eoip_net_ops);
-	goto out;
 }
 
 static void __exit eoip_fini(void)
 {
 	rtnl_link_unregister(&eoip_ops);
-	if (gre_del_protocol(&eoip_protocol, GREPROTO_NONSTD_EOIP) < 0)
-		pr_info("eoip close: can't remove protocol\n");
 	unregister_pernet_device(&eoip_net_ops);
 }
 

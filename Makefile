@@ -36,7 +36,7 @@ libnetlink.o: libnetlink.c libnetlink.h
 	$(E) CC $@
 	$(Q)$(CC) $(MYCFLAGS) -c -o $@ $<
 
-eoipcr.o: eoipcr.c libnetlink.h eoip_version.h unified/eoip_gre.h
+eoipcr.o: eoipcr.c libnetlink.h eoip_version.h unified/eoip_proto.h
 	$(E) CC $@
 	$(Q)$(CC) $(MYCFLAGS) -c -o $@ $<
 
@@ -57,13 +57,12 @@ clean:
 # override KDIR to build for a kernel other than the running one
 modules:
 	$(MAKE) -C unified $(if $(KDIR),KDIR=$(KDIR))
-	cp unified/eoip.ko unified/gre.ko .
+	cp unified/eoip.ko .
 	test ! -f unified/eoipv6.ko || cp unified/eoipv6.ko .
 
 mclean:
 	$(MAKE) -C unified clean $(if $(KDIR),KDIR=$(KDIR))
 	rm -f eoip.ko
-	rm -f gre.ko
 	rm -f eoipv6.ko
 
 minstall:

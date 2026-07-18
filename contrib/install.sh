@@ -6,52 +6,25 @@ set -e
 # Change dir to the script's location
 cd "$(dirname "$0")"
 
-# Check for a loaded gre module
-# note the cat that succeeds even if grep fails; there is set -e on top
-loaded=$(lsmod | grep '^gre ' | cat)
-if [[ "$loaded" != "" ]]; then
-	# Show a hint of loaded modules
-	lsmod | grep '^gre ' | cat
-
-	echo "WARNING: You have a gre module loaded. Removing the existing module may break anything that requires it. Please proceed with caution."
-	read -r -p "Proceed anyway? [y/N] " response
-	if [[ "$response" != "y" && "$response" != "Y" ]]; then
-		echo "Aborted by user request"
-		exit 1
-	fi
-fi
-
-# Delete the existing gre module because on some
-# systems depmod is not enough to override the
-# old gre module.
-find /lib/modules/ -name "gre.ko*" -delete
-
 # If called from contrib folder, change dir up
 basename="$(basename "$(pwd)")"
 if [[ "$basename" == "contrib" ]]; then
 	cd ..
 fi
 
-# Build eoip tool
+# Build and install the eoip userland tool
 make clean
 make
 make install
 
-# The unified source builds on any supported kernel
+# Build and install the kernel modules (eoip.ko and, on IPv6 kernels,
+# eoipv6.ko).  They are standalone and do not replace the stock gre
+# module, so nothing needs to be removed or blacklisted.
 cd unified
-
-# Build eoip module
 make
 make install
 depmod
 
-# Show a hint of loaded modules
-# note the cat that succeeds even if grep fails; there is set -e on top
-lsmod | grep '^gre ' | cat
-
-# Remove the old module
-echo "Attempting to remove the gre module... if this fails, you may have a dependant module that needs to be unloaded first"
-rmmod gre || true
-
-# Load the new module
+# Load the modules
 modprobe eoip
+modprobe eoipv6

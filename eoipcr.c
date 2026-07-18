@@ -10,7 +10,7 @@
 
 #include "eoip_version.h"
 #include "libnetlink.h"
-#include "unified/eoip_gre.h"
+#include "unified/eoip_proto.h"
 
 // nested attribute table size covering both the system IFLA_GRE_* range
 // and the private eoip attributes

@@ -15,11 +15,11 @@
  *	the raw Ethernet frame.  There is no frame length field; frames
  *	are not padded to the Ethernet minimum; tunnels are demultiplexed
  *	by (source address, tunnel id); RouterOS sends hop limit 255,
- *	traffic class 0 and flow label 0.  See eoip_gre.h and the README
+ *	traffic class 0 and flow label 0.  See eoip_proto.h and the README
  *	protocol spec for the wire diagram.
  *
- *	Unlike the IPv4 EoIP pair (eoip.ko + replacement gre.ko), this
- *	module is fully standalone: protocol 97 has no in-tree handler.
+ *	Like eoip.ko, this module is fully standalone; protocol 97 has no
+ *	in-tree handler so it does not even need a netfilter hook.
  *
  *	This is a unified source that builds on all supported kernels
  *	(3.2 .. 7.0+), written against the current kernel API with compat
@@ -63,7 +63,7 @@
 #endif
 
 #include "../eoip_version.h"
-#include "eoip_gre.h"
+#include "eoip_proto.h"
 #include "eoip_keepalive.h"
 
 #if !IS_ENABLED(CONFIG_IPV6)
@@ -444,7 +444,9 @@ drop_nolock:
 
 /* Route to the peer, prepend the outer IPv6 + EoIPv6 header and hand the
  * skb to ip6_local_out().  Consumes the skb.  An empty skb produces a
- * keepalive; tx byte/packet counters are only accounted for data.
+ * keepalive; stats (both errors and tx byte/packet counters) are
+ * accounted only for data - a failing keepalive must not inflate the
+ * error counters of an otherwise idle interface.
  */
 static void eoip6_xmit_skb(struct eoip6_tunnel *tunnel, struct sk_buff *skb)
 {
@@ -475,14 +477,16 @@ static void eoip6_xmit_skb(struct eoip6_tunnel *tunnel, struct sk_buff *skb)
 	dst = ip6_route_output(dev_net(dev), NULL, &fl6);
 	if (dst->error) {
 		dst_release(dst);
-		DEV_STATS_INC(dev, tx_carrier_errors);
+		if (frame_size)
+			DEV_STATS_INC(dev, tx_carrier_errors);
 		goto tx_error;
 	}
 	tdev = dst->dev;
 
 	if (tdev == dev) {
 		dst_release(dst);
-		DEV_STATS_INC(dev, collisions);
+		if (frame_size)
+			DEV_STATS_INC(dev, collisions);
 		goto tx_error;
 	}
 
@@ -490,7 +494,8 @@ static void eoip6_xmit_skb(struct eoip6_tunnel *tunnel, struct sk_buff *skb)
 			ipv6_dev_get_saddr(dev_net(dev), tdev, &fl6.daddr, 0,
 				&fl6.saddr)) {
 		dst_release(dst);
-		DEV_STATS_INC(dev, tx_carrier_errors);
+		if (frame_size)
+			DEV_STATS_INC(dev, tx_carrier_errors);
 		goto tx_error;
 	}
 
@@ -503,7 +508,8 @@ static void eoip6_xmit_skb(struct eoip6_tunnel *tunnel, struct sk_buff *skb)
 		new_skb = skb_realloc_headroom(skb, max_headroom);
 		if (!new_skb) {
 			dst_release(dst);
-			DEV_STATS_INC(dev, tx_dropped);
+			if (frame_size)
+				DEV_STATS_INC(dev, tx_dropped);
 			dev_kfree_skb(skb);
 			return;
 		}
@@ -558,7 +564,8 @@ static void eoip6_xmit_skb(struct eoip6_tunnel *tunnel, struct sk_buff *skb)
 	return;
 
 tx_error:
-	DEV_STATS_INC(dev, tx_errors);
+	if (frame_size)
+		DEV_STATS_INC(dev, tx_errors);
 	dev_kfree_skb(skb);
 }
 

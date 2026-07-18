@@ -13,11 +13,11 @@ This project's goals are:
 Install
 -------
 
-This code was developed on a 3.2.44 linux kernel and tested on the next 3.2.x releases. Patches and out-of-tree builds are provided for 3.2/3.16/4.19 kernels. It should not be hard to adapt it to different Linux kernels.
+This code was originally developed on a 3.2.44 linux kernel; a single unified source now builds on all supported kernels from 3.2 up to current releases.
 
 ### Unified out-of-tree build (recommended)
 
-The `unified/` directory contains a single set of sources (`eoip.c`, `gre.c`, `eoipv6.c`) that builds unmodified on all supported kernels (3.2 up to 7.0+) using `LINUX_VERSION_CODE` conditionals. No patching happens at build time and every kernel version gets the same features at the same time. `eoipv6.ko` is built automatically when the kernel has IPv6 support and is fully standalone (it does not need the replacement `gre.ko`):
+The `unified/` directory contains a single set of sources (`eoip.c`, `eoipv6.c`) that builds unmodified on all supported kernels (3.2 up to 7.0+) using `LINUX_VERSION_CODE` conditionals. No patching happens at build time and every kernel version gets the same features at the same time. Both modules are fully standalone: they do not replace the in-tree `gre` module. `eoip.ko` intercepts its protocol-47 packets with a netfilter hook so standard GRE and PPTP keep working; `eoipv6.ko` uses IPv6 protocol 97 which has no in-tree handler. `eoipv6.ko` is built automatically when the kernel has IPv6 support:
 
 ````shell
 cd path-to-eoip/unified
@@ -28,36 +28,6 @@ make install
 
 The per-version `out-of-tree-X.Y.x` directories and `kernel-patch/` patches are retained for reference under `obsolete/`, but the unified build is preferred.
 
--   To patch a kernel tree:
-
-````shell
-cd path-to-kernel-source/linux-X.Y.Z
-patch -p1 < path-to-eoip/obsolete/kernel-patch/kernel-X.Y.Z-eoip-gre-demux.patch
-patch -p1 < path-to-eoip/obsolete/kernel-patch/kernel-X.Y.Z-eoip-buildconf.patch
-patch -p1 < path-to-eoip/obsolete/kernel-patch/kernel-X.Y.Z-eoip.patch
-````
-
-afterwards configure the kernel in the usual ways `make (menu/x/...)config` and do not forget to select `IP: EOIP tunnels over IP` located under `Networking options` from `Networking support`
-
-EOIP tunnel depends on `IP: GRE demultiplexer` - if it not selected then EOIP tunnel is not shown at all
-
-Unless the target is a limited embedded system, it is recommended to build EOIP and GRE demux as modules.
-
--   To build the modules out of the kernel tree (legacy per-version way):
-
-````shell
-cd path-to-eoip/obsolete/out-of-tree-X.Y.Z
-make
-make install
-````
-
-For this to work at least the running kernel's headers should be available.
-
-On Debian/Ubuntu systems this build process will place the newly built modules in `/lib/modules/x.x.x.x/misc`. Note that there will be two versions of `gre.ko` (the GRE demux).
-At least on 3.2/3.16/4.19 it is safe to replace the original version with the modified one because it is backwards compatible.
-
-The `eoip.ko` module cannot operate properly without the newly built version of GRE demux (`gre.ko`). If the original `gre.ko` is loaded then it should be removed and the newly built `gre.ko` loaded before loading `eoip.ko`.
-
 -   To build the userland management utility `eoip`:
 
 ````shell
@@ -65,50 +35,42 @@ cd path-to-eoip
 make
 ````
 
-### Example how to build out of tree
-
-This example may be used as a checklist for an out of tree build:
+Afterwards load the modules and create a tunnel:
 
 ````shell
-root@ubuntu-18_04:~/eoip# make
-cc -Wall -Os -c libnetlink.c
-cc -Wall -Os -o eoip eoipcr.c libnetlink.o
-strip eoip
-root@ubuntu-18_04:~/eoip# cd out-of-tree-4.15.x/
-root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# make
-patching file eoip.c
-using 4.15.0 version of gre_demux.c
-found running kernel version of gre.h
-patching file gre.h
-Hunk #1 succeeded at 24 (offset 15 lines).
-patching file gre_demux.c
-Hunk #3 succeeded at 137 (offset -9 lines).
-Hunk #4 succeeded at 173 (offset -9 lines).
-make[1]: Entering directory '/usr/src/linux-headers-4.15.0-106-generic'
-  CC [M]  /root/eoip/out-of-tree-4.15.x/eoip.o
-  CC [M]  /root/eoip/out-of-tree-4.15.x/gre.o
-  Building modules, stage 2.
-  MODPOST 2 modules
-  CC      /root/eoip/out-of-tree-4.15.x/eoip.mod.o
-  LD [M]  /root/eoip/out-of-tree-4.15.x/eoip.ko
-  CC      /root/eoip/out-of-tree-4.15.x/gre.mod.o
-  LD [M]  /root/eoip/out-of-tree-4.15.x/gre.ko
-make[1]: Leaving directory '/usr/src/linux-headers-4.15.0-106-generic'
-root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./gre.ko
-root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# insmod ./eoip.ko
-root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ../eoip add name eoip0 local 203.0.113.113 remote 198.51.100.100 tunnel-id 8421
-root@ubuntu-18_04:~/eoip/out-of-tree-4.15.x# ip li set eoip0 up
+insmod unified/eoip.ko                   # or: modprobe eoip
+insmod unified/eoipv6.ko                  # for eoipv6, on IPv6 kernels
+./eoip add name eoip0 local 203.0.113.113 remote 198.51.100.100 tunnel-id 8421
+ip link set eoip0 up
 ````
+
+Nothing else needs to be loaded, removed or blacklisted: the stock `gre` module is left untouched.
+
+### Legacy per-version builds
+
+The `obsolete/` directory keeps the historical per-version kernel patches (`obsolete/kernel-patch/`) and out-of-tree build directories (`obsolete/out-of-tree-X.Y.x/`) for reference only. They used an older design that shipped a modified GRE demultiplexer (`gre.ko`) alongside `eoip.ko`; the unified build above supersedes them and needs no kernel module replacement.
 
 ### DKMS
 
 ````shell
 cd path-to-eoip
-ln -s $(pwd) /usr/src/eoip-1.1
-dkms add eoip/1.1
-dkms build eoip/1.1
-dkms install eoip/1.1
+ln -s $(pwd) /usr/src/eoip-2.1
+dkms add eoip/2.1
+dkms build eoip/2.1
+dkms install eoip/2.1
 ````
+
+### In-tree kernel build
+
+To build the drivers as part of a kernel source tree, run:
+
+````shell
+contrib/kernel-intree.sh /path/to/linux-source
+````
+
+This copies `eoip.c`/`eoipv6.c` (and their headers) into `net/ipv4` and `net/ipv6`, and wires up `CONFIG_NET_EOIP` and `CONFIG_NET_EOIP6`. Then enable them (`make menuconfig`, or `scripts/config --module NET_EOIP --module NET_EOIP6`) and build the kernel as usual.
+
+Because the drivers are self-contained new files, this works unchanged across the whole supported kernel range (3.2 up to current): the script only *adds* files and *appends* the build rules, so it does not depend on the exact contents of the kernel's Makefiles and Kconfigs, which differ between versions. A conventional context-diff patch could not do this.
 
 Userland management utility
 ---------------------------
@@ -179,7 +141,9 @@ Roadmap
 
     The inclusion of a reverse-engineered proprietary protocol which violates GRE standards is not going to happen in the official Linux kernel. Creating a patch for iproute2 is pointless as it would require patching and replacing one more component that in turn would make supporting a Linux system with kernel mode EoIP even harder. Thus using the included simple tool would be easier and preferred.
 
-    The problem in making a stand-alone EoIP kernel module is that it requires replacing gre_demux (`gre.ko`). Linux kernel does not support overloading IP protocol handlers and EoIP does not fit anywhere in the standard gre_demux logic. A relatively sane solution might be to include the GRE demultiplexing logic in the EoIP kernel module itself, to provide a `gre` alias and to blacklist the original `gre.ko`. In this way GRE and PPTP would still be able to coexist with EoIP.
+-   ~~make a stand-alone EoIP kernel module that does not replace `gre.ko`~~
+
+    Historically EoIP required a modified `gre.ko` because the Linux kernel allows only one handler per IP protocol and the in-tree `gre` module owns protocol 47, while the non-standard EoIP header does not fit the standard demultiplexing logic. This is solved: `eoip.ko` now intercepts its own packets with a netfilter `LOCAL_IN` hook (registered lazily, only while a tunnel exists) and lets everything else fall through to the stock `gre` module, so standard GRE and PPTP coexist with EoIP without any kernel module replacement. `eoipv6.ko` was standalone from the start (protocol 97 has no in-tree handler).
 
 -   ~~make a DKMS package~~
 -   ~~implement the `keepalive` option (off by default for backward compatibility)~~
@@ -251,7 +215,7 @@ MikroTik's EoIPv6 (`/interface eoipv6`) is a completely different protocol from 
 -   RouterOS sends tunnel packets with hop limit 255, traffic class 0 and flow label 0 (observed on live captures for both keepalives and data packets).
 -   Encapsulated frames are not padded to the 60 byte Ethernet minimum - e.g. a 42 byte ARP frame is carried as-is (observed on a live capture).
 
-EoIPv6 is implemented by the standalone `eoipv6.ko` module (built from `unified/eoipv6.c` when the kernel has IPv6 support); unlike the EoIP pair it does not need the replacement GRE demultiplexer.
+EoIPv6 is implemented by the standalone `eoipv6.ko` module (built from `unified/eoipv6.c` when the kernel has IPv6 support).
 
 ### Keepalive packet format (EoIPv6)
 

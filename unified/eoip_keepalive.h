@@ -39,7 +39,7 @@
 #include <linux/jiffies.h>
 #include <linux/netdevice.h>
 
-#include "eoip_gre.h"
+#include "eoip_proto.h"
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 /* v6.2 added timer_delete_sync(); the del_timer_sync() wrapper it
@@ -104,7 +104,8 @@ static void eoip_ka_init(struct eoip_keepalive *ka, struct net_device *dev,
 /* start/refresh keepalive on an up device; caller holds RTNL */
 static void eoip_ka_start(struct eoip_keepalive *ka)
 {
-	ka->rx_time = jiffies;	/* full grace period */
+	/* WRITE_ONCE: the RX softirq may store rx_time concurrently */
+	WRITE_ONCE(ka->rx_time, jiffies);	/* full grace period */
 	netif_carrier_on(ka->dev);
 	ka->send(ka->dev);	/* announce ourselves at once */
 	mod_timer(&ka->timer, jiffies + (unsigned long)ka->interval * HZ);
