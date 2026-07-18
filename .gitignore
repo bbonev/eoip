@@ -9,15 +9,3 @@ unified/.*.cmd
 unified/.*.d
 unified/Module.symvers
 unified/modules.order
-obsolete/out-of-tree-*/*o.cmd
-obsolete/out-of-tree-*/*d
-obsolete/out-of-tree-*/Module.symvers
-obsolete/out-of-tree-*/modules.order
-obsolete/out-of-tree-*/*.orig
-obsolete/out-of-tree-*/eoip.c
-obsolete/out-of-tree-*/*.ko
-obsolete/out-of-tree-*/gre_demux.c
-obsolete/out-of-tree-*/*.mod.c
-obsolete/out-of-tree-*/gre.c
-obsolete/out-of-tree-*/gre.h
-obsolete/out-of-tree-*/built-in.a
