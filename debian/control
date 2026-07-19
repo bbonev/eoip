@@ -2,7 +2,7 @@ Source: eoip
 Section: net
 Maintainer: Boian Bonev <bbonev@ipacct.com>
 Build-Depends:
- debhelper-compat (= 13),
+ debhelper-compat (= 14),
  dh-sequence-dkms,
 Standards-Version: 4.7.4
 Homepage: https://github.com/bbonev/eoip
