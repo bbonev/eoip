@@ -79,7 +79,7 @@ Userland management utility
 -   Keepalive is supported but off by default; either enable it (`keepalive 10,10` matches the RouterOS default) or configure the tunnel on MikroTik's end with `!keepalive`.
 -   It is a good idea to use IP fragmentation and to set MTU on both ends to 1500; using `clamp-tcp-mss` is pointless in this case. For performance it would be best if the transport network's MTU is 42+tunnel MTU (42 bytes is the EoIP protocol overhead) but obviously that is not the case over the Internet.
 -   The EoIP protocol is connection-less and requires both ends to be able to reach the other end. In case only one end has a public IP, the other end may establish a private network by using another protocol that works over NAT (e.g. `PPTP`, `L2TP`, etc.) and run EoIP on top of the newly established private network.
--   Security warning: EoIP is a simple encapsulation and does implement any transport security.
+-   Security warning: EoIP is a simple encapsulation and does not implement any transport security.
 
 ### Usage
 
