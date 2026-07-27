@@ -995,6 +995,12 @@ static int __eoip6_newlink(struct net_device *dev,
 	if (err)
 		return err;
 
+	/* operstate stays IF_OPER_UNKNOWN until the first carrier
+	 * transition; start with carrier off so the netif_carrier_on()
+	 * at open time yields a tracked UP/DOWN state from the start
+	 */
+	netif_carrier_off(dev);
+
 	eoip6_tunnel_link(ign, nt);
 
 	return 0;
