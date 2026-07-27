@@ -234,9 +234,9 @@ Both modules implement these semantics with `keepalive <interval>[,<retries>]`; 
 Bugs
 ----
 
-This code was tested and works without problems on quite a few different 32/64bit x86 systems.
+This code was tested and works without problems on quite a few different 32bit x86, 32bit arm, 64bit x86 and 64bit arm systems.
 
-No testing was done on non-x86 and big endian hardware.
+No testing was done on big endian hardware.
 
 There is no guarantee that there are no bugs left. Patches are welcome.
 
