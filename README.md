@@ -79,6 +79,25 @@ Userland management utility
 -   Keepalive is supported but off by default; either enable it (`keepalive 10,10` matches the RouterOS default) or configure the tunnel on MikroTik's end with `!keepalive`.
 -   It is a good idea to use IP fragmentation and to set MTU on both ends to 1500; using `clamp-tcp-mss` is pointless in this case. For performance it would be best if the transport network's MTU is 42+tunnel MTU (42 bytes is the EoIP protocol overhead) but obviously that is not the case over the Internet.
 -   The EoIP protocol is connection-less and requires both ends to be able to reach the other end. In case only one end has a public IP, the other end may establish a private network by using another protocol that works over NAT (e.g. `PPTP`, `L2TP`, etc.) and run EoIP on top of the newly established private network.
+-   Stateful firewalls silently drop EoIP. EoIP is GRE version 1 with the non-standard protocol type 0x6400; the kernel GRE connection tracker (`CONFIG_NF_CT_PROTO_GRE`, enabled on all common distributions) parses GRE version 1 only in its PPTP form, so every EoIP packet fails tuple extraction and is classified INVALID. Rulesets that drop invalid packets early (e.g. firewalld's built-in `ct state invalid drop` rule) discard the tunnel traffic before any GRE accept rule is consulted: tcpdump still shows the packets, the interface RX counters stay at zero and a keepalive-monitored tunnel never raises its carrier. Exempt GRE from connection tracking *and* accept it (the accept is still needed because untracked packets never match an established/related shortcut):
+
+    ````none
+    nft -f - <<'EOF'
+    table inet eoip_notrack {
+        chain pre {
+            type filter hook prerouting priority raw; policy accept;
+            ip protocol 47 notrack
+        }
+        chain out {
+            type filter hook output priority raw; policy accept;
+            ip protocol 47 notrack
+        }
+    }
+    EOF
+    firewall-cmd --add-protocol=gre --permanent   # firewalld hosts
+    ````
+
+    The same classification affects EoIP transiting a Linux router that drops invalid packets in its forward path. EoIPv6 (IP protocol 97) is handled by the generic connection tracker and is not affected; it only needs a plain accept for protocol 97.
 -   Security warning: EoIP is a simple encapsulation and does not implement any transport security.
 
 ### Usage
@@ -234,7 +253,7 @@ Both modules implement these semantics with `keepalive <interval>[,<retries>]`; 
 Bugs
 ----
 
-This code was tested and works without problems on quite a few different 32bit x86, 32bit arm, 64bit x86 and 64bit arm systems.
+This code was tested and works without problems on quite a few different 32bit x86, 32bit arm, 64bit x86, 64bit arm and 64bit riscv systems.
 
 No testing was done on big endian hardware.
 
