@@ -134,6 +134,45 @@ On the MikroTik side, either enable keepalive to match or configure the
 tunnel with
 .BR !keepalive .
 .PP
+Hosts with a stateful firewall may silently drop all incoming EoIP
+packets.  EoIP uses GRE version 1 with the non-standard protocol type
+0x6400; the kernel GRE connection tracker
+.RB ( CONFIG_NF_CT_PROTO_GRE ,
+enabled on all common distributions) parses GRE version 1 only in its
+PPTP form, so every EoIP packet fails tuple extraction and is
+classified INVALID.  Rulesets that drop invalid packets early (for
+example firewalld's built-in
+.I ct state invalid drop
+rule) discard the tunnel traffic before any GRE accept rule is
+consulted: tcpdump still shows the packets, the interface RX counters
+stay at zero and a keepalive monitored tunnel never raises its
+carrier.  Exempt GRE from connection tracking and accept it:
+.PP
+.RS
+.nf
+nft -f - <<'EOF'
+table inet eoip_notrack {
+    chain pre {
+        type filter hook prerouting priority raw; policy accept;
+        ip protocol 47 notrack
+    }
+    chain out {
+        type filter hook output priority raw; policy accept;
+        ip protocol 47 notrack
+    }
+}
+EOF
+firewall-cmd --add-protocol=gre --permanent   # firewalld hosts
+.fi
+.RE
+.PP
+The accept rule is still needed because untracked packets never match
+an established/related shortcut.  The same classification affects EoIP
+transit through a Linux router that drops invalid packets in its
+forward path.  EoIPv6 (IP protocol 97) is handled by the generic
+connection tracker and is not affected; it only needs a plain accept
+for protocol 97.
+.PP
 EoIP provides no transport security; use it over trusted network or over some other
 encrypted transport.
 .PP
