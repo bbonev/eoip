@@ -6,8 +6,8 @@ Please use the table below to check if your version of the software is currently
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 2.2     | :white_check_mark: |
-| < 2.2   | :x:                |
+| 2.3     | :white_check_mark: |
+| < 2.3   | :x:                |
 
 ## Reporting a Vulnerability
 
