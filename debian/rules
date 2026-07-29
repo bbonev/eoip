@@ -2,6 +2,9 @@
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
+# the kernel modules are built by dkms on the target system
+export NO_MODS = 1
+
 VERSION := $(shell ./version.sh)
 DKMSDIR := debian/eoip-dkms/usr/src/eoip-$(VERSION)
 
