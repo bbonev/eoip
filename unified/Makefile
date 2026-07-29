@@ -19,12 +19,22 @@ else
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
 default:
-	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
+	$(Q)$(MAKE) --no-print-directory -C $(KDIR) M=$(CURDIR) modules
 
 clean:
-	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
+	$(Q)$(MAKE) --no-print-directory -C $(KDIR) M=$(CURDIR) clean
 
 install modules_install:
-	$(MAKE) -C $(KDIR) M=$(CURDIR) modules_install
+	$(Q)$(MAKE) --no-print-directory -C $(KDIR) M=$(CURDIR) modules_install
+
+uninstall:
+	$(E) RMMOD
+	$(Q)-modprobe -r eoip
+	$(Q)-modprobe -r eoipv6
+	$(E) RM eoip/eoipv6 .ko
+	$(Q)-rm -f /lib/modules/$(shell uname -r)/updates/eoip.ko*
+	$(Q)-rm -f /lib/modules/$(shell uname -r)/updates/eoipv6.ko*
+	$(E) DEPMOD
+	$(Q)depmod -a
 
 endif
