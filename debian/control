@@ -10,7 +10,7 @@ Vcs-Browser: https://github.com/bbonev/eoip
 Vcs-Git: https://github.com/bbonev/eoip.git
 
 Package: eoip
-Architecture: any
+Architecture: linux-any
 Multi-Arch: foreign
 Depends:
  ${misc:Depends},
